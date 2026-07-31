@@ -31,6 +31,7 @@
 #include <onlplib/mmap.h>
 #include <limits.h>
 #include "platform_lib.h"
+#include "x86_64_accton_as7326_56x_log.h"
 
 #define prefix_path "/sys/class/leds/accton_as7326_56x_led::"
 #define filename    "brightness"
@@ -197,8 +198,17 @@ static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led
 int
 onlp_ledi_init(void)
 {
-	onlp_ledi_mode_set(ONLP_LED_ID_CREATE(LED_DIAG), ONLP_LED_MODE_OFF);
-	onlp_ledi_mode_set(ONLP_LED_ID_CREATE(LED_LOC), ONLP_LED_MODE_OFF);
+    int rv;
+
+    rv = onlp_ledi_mode_set(ONLP_LED_ID_CREATE(LED_DIAG), ONLP_LED_MODE_OFF);
+    if (rv < 0) {
+        AIM_LOG_WARN("Failed to initialize DIAG LED to OFF (rv=%d)", rv);
+    }
+
+    rv = onlp_ledi_mode_set(ONLP_LED_ID_CREATE(LED_LOC), ONLP_LED_MODE_OFF);
+    if (rv < 0) {
+        AIM_LOG_WARN("Failed to initialize LOC LED to OFF (rv=%d)", rv);
+    }
 
     return ONLP_STATUS_OK;
 }
@@ -207,7 +217,7 @@ int
 onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
 {
     int  local_id;
-	char data[2] = {0};
+	char data[16] = {0};
     char fullpath[PATH_MAX] = {0};
 
     VALIDATE(id);

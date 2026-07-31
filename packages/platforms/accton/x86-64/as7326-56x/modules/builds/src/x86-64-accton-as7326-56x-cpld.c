@@ -631,7 +631,7 @@ static const struct attribute_group as7326_56x_cpld1_group = {
 };
 
 /*Split a number into bytes and insert blank between any 2 of bytes.*/
-static int string_byte_sep(char *out, int bits, u64 bytes)
+static int string_byte_sep(char *out, size_t out_size, int bits, u64 bytes)
 { 
     int i;
     char sb[8];
@@ -642,7 +642,7 @@ static int string_byte_sep(char *out, int bits, u64 bytes)
     out[0] = 0; 
     for (i = 0; i < ((bits+7)/8); i++) {
         sprintf(sb, "%02llx ", (bytes>>(i*8))&0xff);
-        strncat(out, sb, strlen(sb));
+        strlcat(out, sb, out_size);
     }
     out[strlen(out)-1] = 0;
 
@@ -699,8 +699,8 @@ static ssize_t show_present_all(struct device *dev, struct device_attribute *da,
         num = 28;
         values &= (1<<num)-1;
     }
-    string_byte_sep(buf, num, values);
-    return sprintf(buf, "%s", buf);
+    string_byte_sep(buf, PAGE_SIZE, num, values);
+    return strlen(buf);
 exit:
     mutex_unlock(&data->update_lock);
     return status;
@@ -757,8 +757,8 @@ static ssize_t show_rxlos_all(struct device *dev, struct device_attribute *da,
         num = 28;
         values &= (1<<num)-1;
     }
-    string_byte_sep(buf, num, values);
-    return sprintf(buf, "%s", buf);
+    string_byte_sep(buf, PAGE_SIZE, num, values);
+    return strlen(buf);
 exit:
     mutex_unlock(&data->update_lock);
     return status;
