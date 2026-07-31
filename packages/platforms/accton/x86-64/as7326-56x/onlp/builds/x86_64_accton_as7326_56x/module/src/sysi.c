@@ -153,7 +153,8 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
                                     v[0], v[1], v[2], v[3], v[4]);
 
     pi->other_versions = aim_fstrdup("\r\n\t   BIOS: %s\r\n\t   ONIE: %s",
-                                    bios_ver, onie.onie_version);
+                                    bios_ver ? bios_ver : "unknown",
+                                    onie.onie_version ? onie.onie_version : "unknown");
 
     onlp_onie_info_free(&onie);
     AIM_FREE_IF_PTR(bios_ver);
@@ -296,12 +297,13 @@ onlp_sysi_platform_manage_fans(void)
         AIM_LOG_ERROR("Unable to open fan speed control node (%s)", FAN_SPEED_CTRL_PATH);
         return ONLP_STATUS_E_INTERNAL;
     }
-    len = read(fd, buf, sizeof(buf));
+    len = read(fd, buf, sizeof(buf) - 1);
     close(fd);
     if (len <= 0) {
         AIM_LOG_ERROR("Unable to read fan speed from (%s)", FAN_SPEED_CTRL_PATH);
         return ONLP_STATUS_E_INTERNAL;
     }
+    buf[len] = '\0';
     cur_duty_cycle = atoi(buf);
     ori_state=fan_state;
     /* Inpunt temp to get theraml_polyc state and new pwm percent. */

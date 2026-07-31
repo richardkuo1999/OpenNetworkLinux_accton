@@ -259,13 +259,14 @@ static void accton_as7326_56x_led_set(struct led_classdev *led_cdev,
                                       enum led_type type)
 {
     int reg_val;
-    u8 reg	;
+    u8 reg = 0;
 
     mutex_lock(&ledctl->update_lock);
 
-    if( !accton_getLedReg(type, &reg))
+    if (accton_getLedReg(type, &reg))
     {
-        dev_dbg(&ledctl->pdev->dev, "Not match item for %d.\n", type);
+        dev_err(&ledctl->pdev->dev, "Not match item for %d.\n", type);
+        goto exit;
     }
 
     reg_val = accton_as7326_56x_led_read_value(reg);
@@ -420,7 +421,7 @@ static int accton_as7326_56x_led_probe(struct platform_device *pdev)
 
         /* only unregister the LEDs that were successfully registered */
         for (j = 0; j < i; j++) {
-            led_classdev_unregister(&accton_as7326_56x_leds[i]);
+            led_classdev_unregister(&accton_as7326_56x_leds[j]);
         }
     }
 

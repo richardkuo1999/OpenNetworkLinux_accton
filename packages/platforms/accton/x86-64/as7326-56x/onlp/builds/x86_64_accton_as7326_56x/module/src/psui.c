@@ -28,6 +28,7 @@
 //#include <stdio.h>
 #include <string.h>
 #include "platform_lib.h"
+#include "x86_64_accton_as7326_56x_log.h"
 
 
 
@@ -158,7 +159,9 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
 
     /* Get the present state */
     if (psu_status_info_get(index, "psu_present", &val) != 0) {
-        printf("Unable to read PSU(%d) node(psu_present)\r\n", index);
+        AIM_LOG_ERROR("Unable to read PSU(%d) node(psu_present)", index);
+        info->status &= ~ONLP_PSU_STATUS_PRESENT;
+        return ONLP_STATUS_E_INTERNAL;
     }
 
     if (val != PSU_STATUS_PRESENT) {
@@ -166,6 +169,18 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
         return ONLP_STATUS_OK;
     }
     info->status |= ONLP_PSU_STATUS_PRESENT;
+
+    /* Get power good status */
+    if (psu_status_info_get(index, "psu_power_good", &val) != 0) {
+        AIM_LOG_ERROR("Unable to read PSU(%d) node(psu_power_good)", index);
+        info->status |= ONLP_PSU_STATUS_FAILED;
+        return ONLP_STATUS_E_INTERNAL;
+    }
+
+    if (val != PSU_STATUS_POWER_GOOD) {
+        info->status |= ONLP_PSU_STATUS_UNPLUGGED;
+        return ONLP_STATUS_OK;
+    }
 
     /* Get PSU type
      */
@@ -199,16 +214,6 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
         default:
             ret = ONLP_STATUS_E_UNSUPPORTED;
             break;
-    }
-
-    /* Get power good status */
-    if (psu_status_info_get(index, "psu_power_good", &val) != 0) {
-        printf("Unable to read PSU(%d) node(psu_power_good)\r\n", index);
-    }
-
-    if (val != PSU_STATUS_POWER_GOOD) {
-        info->status |=  ONLP_PSU_STATUS_UNPLUGGED;
-        info->caps = 0;
     }
 
     return ret;

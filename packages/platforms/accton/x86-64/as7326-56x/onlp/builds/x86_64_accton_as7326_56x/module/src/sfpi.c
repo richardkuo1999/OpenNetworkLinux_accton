@@ -179,7 +179,7 @@ onlp_sfpi_presence_bitmap_get(onlp_sfp_bitmap_t* dst)
     presence_all |= per_cpld;
 
     /* Populate bitmap */
-    for(i = 0; presence_all; i++) {
+    for (i = 0; i <= MAX_PORT; i++) {
         AIM_BITMAP_MOD(dst, i, (presence_all & 1));
         presence_all >>= 1;
     }
@@ -232,7 +232,7 @@ onlp_sfpi_rx_los_bitmap_get(onlp_sfp_bitmap_t* dst)
     all |= per_cpld;
 
     /* Populate bitmap */
-    for(i = 0; all; i++) {
+    for (i = 0; i <= MAX_PORT; i++) {
         AIM_BITMAP_MOD(dst, i, (all & 1));
         all >>= 1;
     }
@@ -297,28 +297,36 @@ onlp_sfpi_dom_read(int port, uint8_t data[256])
 int
 onlp_sfpi_dev_readb(int port, uint8_t devaddr, uint8_t addr)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_PORT(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_readb(bus, devaddr, addr, ONLP_I2C_F_FORCE);
 }
 
 int
 onlp_sfpi_dev_writeb(int port, uint8_t devaddr, uint8_t addr, uint8_t value)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_PORT(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_writeb(bus, devaddr, addr, value, ONLP_I2C_F_FORCE);
 }
 
 int
 onlp_sfpi_dev_readw(int port, uint8_t devaddr, uint8_t addr)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_PORT(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_readw(bus, devaddr, addr, ONLP_I2C_F_FORCE);
 }
 
 int
 onlp_sfpi_dev_writew(int port, uint8_t devaddr, uint8_t addr, uint16_t value)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_PORT(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_writew(bus, devaddr, addr, value, ONLP_I2C_F_FORCE);
 }
 
