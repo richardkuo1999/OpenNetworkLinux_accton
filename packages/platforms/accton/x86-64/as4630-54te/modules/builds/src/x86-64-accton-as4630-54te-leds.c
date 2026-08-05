@@ -449,25 +449,24 @@ static int as4630_54te_led_resume(struct platform_device *dev)
 
 static int as4630_54te_led_probe(struct platform_device *pdev)
 {
-	int ret, i;
+	int ret = 0, i, j;
 
 	for (i = 0; i < ARRAY_SIZE(as4630_54te_leds); i++) {
 		ret = led_classdev_register(&pdev->dev, &as4630_54te_leds[i]);
-
-		if (ret < 0)
-			break;
+		if (ret < 0) {
+			dev_err(&pdev->dev,
+				"failed to register led[%d] (%s), ret=%d\n",
+				i, as4630_54te_leds[i].name, ret);
+			/* Roll back only the LEDs that were successfully
+			 * registered (indices 0..i-1).
+			 */
+			for (j = 0; j < i; j++)
+				led_classdev_unregister(&as4630_54te_leds[j]);
+			return ret;
+		}
 	}
 
-	/* Check if all LEDs were successfully registered */
-	if (i != ARRAY_SIZE(as4630_54te_leds)) {
-		int j;
-
-		/* only unregister the LEDs that were successfully registered */
-		for (j = 0; j < i; j++)
-			led_classdev_unregister(&as4630_54te_leds[i]);
-	}
-
-	return ret;
+	return 0;
 }
 
 static int as4630_54te_led_remove(struct platform_device *pdev)
@@ -524,6 +523,7 @@ static void __exit as4630_54te_led_exit(void)
 {
 	platform_device_unregister(ledctl->pdev);
 	platform_driver_unregister(&as4630_54te_led_driver);
+	mutex_destroy(&ledctl->update_lock);
 	kfree(ledctl);
 }
 

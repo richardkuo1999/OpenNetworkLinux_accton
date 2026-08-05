@@ -124,7 +124,7 @@ static onlp_led_info_t linfo[] =
         ONLP_LED_CAPS_ON_OFF | ONLP_LED_CAPS_ORANGE | ONLP_LED_CAPS_GREEN,
     },
     {
-        { ONLP_LED_ID_CREATE(LED_PRI), "LED 3 (POE LED)", 0, {0} },
+        { ONLP_LED_ID_CREATE(LED_POE), "LED 3 (POE LED)", 0, {0} },
         ONLP_LED_STATUS_PRESENT,
         ONLP_LED_CAPS_ON_OFF | ONLP_LED_CAPS_ORANGE | ONLP_LED_CAPS_GREEN,
     },
@@ -165,7 +165,7 @@ static int driver_to_onlp_led_mode(enum onlp_led_id id, enum led_light_mode driv
         }
     }
 
-    return 0;
+    return -1;
 }
 
 static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led_mode)
@@ -178,7 +178,7 @@ static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led
         }
     }
 
-    return 0;
+    return -1;
 }
 
 /*
@@ -200,16 +200,27 @@ onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
     VALIDATE(id);
 
     lid = ONLP_OID_ID_GET(id);
+    /* Reject IDs outside the linfo[] / leds[] range before the array reads
+     * below (both are sized 1 + LED_PSU2, indices 1..LED_PSU2 are valid).
+     */
+    if (lid < LED_DIAG || lid > LED_PSU2) {
+        return ONLP_STATUS_E_INVALID;
+    }
 
     /* Set the onlp_oid_hdr_t and capabilities */
-    *info = linfo[ONLP_OID_ID_GET(id)];
+    *info = linfo[lid];
 
     /* Get LED mode */
     if (onlp_file_read_int(&value, LED_FORMAT, leds[lid]) < 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
 
-    info->mode = driver_to_onlp_led_mode(lid, value);
+    int mode = driver_to_onlp_led_mode(lid, value);
+    if (mode < 0) {
+        /* No led_map[] entry: reject rather than fall back to 0 (LED_MODE_OFF). */
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+    info->mode = mode;
 
     /* Set the on/off status */
     if (info->mode != ONLP_LED_MODE_OFF) {
@@ -256,9 +267,15 @@ onlp_ledi_mode_set(onlp_oid_t id, onlp_led_mode_t mode)
 
     lid = ONLP_OID_ID_GET(id);
 
-    if (onlp_file_write_int(onlp_to_driver_led_mode(lid , mode), LED_FORMAT, leds[lid]) != 0) {
+    int driver_mode = onlp_to_driver_led_mode(lid, mode);
+    if (driver_mode < 0) {
+        /* Unsupported (led, mode) pair: don't silently write 0 (=OFF). */
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+    if (onlp_file_write_int(driver_mode, LED_FORMAT, leds[lid]) != 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
+
 
     return ONLP_STATUS_OK;
 }

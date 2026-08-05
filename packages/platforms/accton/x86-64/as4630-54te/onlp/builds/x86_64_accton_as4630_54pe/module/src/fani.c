@@ -157,6 +157,16 @@ static int
 _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
     int val = 0;
+    int present = 0;
+
+    /* PSU fan is physically inside the PSU; if the PSU itself is not
+     * present, neither is the fan.  Report an empty status instead of
+     * lying with PRESENT | FAILED.
+     */
+    if (psu_status_info_get(pid, "psu_present", &present) != ONLP_STATUS_OK ||
+        present != PSU_STATUS_PRESENT) {
+        return ONLP_STATUS_OK;
+    }
 
     info->status |= ONLP_FAN_STATUS_PRESENT;
 
@@ -196,6 +206,10 @@ onlp_fani_info_get(onlp_oid_t id, onlp_fan_info_t* info)
     VALIDATE(id);
 
     fid = ONLP_OID_ID_GET(id);
+    /* Reject IDs outside the finfo[] range before the array read below. */
+    if (fid < FAN_1_ON_FAN_BOARD || fid > FAN_1_ON_PSU_2) {
+        return ONLP_STATUS_E_INVALID;
+    }
     *info = finfo[fid];
 
     switch (fid) {

@@ -56,14 +56,17 @@ int
 onlp_sysi_onie_data_get(uint8_t** data, int* size)
 {
 	uint8_t* rdata = aim_zmalloc(256);
+	static const char* idprom_paths[] = { IDPROM_PATH_1, IDPROM_PATH_2 };
+	size_t p;
 
-	if(onlp_file_read(rdata, 256, size, IDPROM_PATH_1) == ONLP_STATUS_OK) {
-		if(*size == 256) {
-			*data = rdata;
-			return ONLP_STATUS_OK;
-		}
-	} else if(onlp_file_read(rdata, 256, size, IDPROM_PATH_2) == ONLP_STATUS_OK) {
-		if(*size == 256) {
+	/* Try each candidate path.  Fall through on either read failure OR a
+	 * short read (size != 256), so a truncated EEPROM read on PATH_1 does
+	 * not become a black hole (previous `else if` only tried PATH_2 when
+	 * PATH_1 completely failed).
+	 */
+	for (p = 0; p < sizeof(idprom_paths) / sizeof(idprom_paths[0]); p++) {
+		if (onlp_file_read(rdata, 256, size, idprom_paths[p]) == ONLP_STATUS_OK &&
+		    *size == 256) {
 			*data = rdata;
 			return ONLP_STATUS_OK;
 		}
@@ -126,7 +129,10 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
             onlp_file_read_int(v+i, cpld_ver_path[i]);
     }
     /* BIOS version */
-    onlp_file_read_str(&bios_ver, BIOS_VER_PATH);
+    if (onlp_file_read_str(&bios_ver, BIOS_VER_PATH) < 0 || bios_ver == NULL) {
+        AIM_LOG_WARN("Unable to read BIOS version from %s", BIOS_VER_PATH);
+        bios_ver = aim_strdup("N/A");
+    }
     /* ONIE version */
     snprintf(path, sizeof(path), IDPROM_PATH, 1+bus_offset);
     onlp_onie_decode_file(&onie, path);
@@ -136,7 +142,8 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
                                     , v[0], v[1], v[2], v[3]);
 
     pi->other_versions = aim_fstrdup("\r\n\t   BIOS: %s\r\n\t   ONIE: %s",
-                                    bios_ver, onie.onie_version);
+                                    bios_ver,
+                                    onie.onie_version ? onie.onie_version : "N/A");
 
     onlp_onie_info_free(&onie);
     AIM_FREE_IF_PTR(bios_ver);
@@ -197,7 +204,6 @@ int onlp_sysi_platform_manage_fans(void)
     int i = 0, ori_state = LEVEL_FAN_MIN, current_state=LEVEL_FAN_MIN;
     int cur_duty_cycle = 0, new_duty_cycle = 0, temp = 0;
     onlp_thermal_info_t thermali[3];
-    char buf[10] = { 0 };
 
     /* Get current temperature
      */
@@ -219,16 +225,27 @@ int onlp_sysi_platform_manage_fans(void)
         return ONLP_STATUS_E_INTERNAL;
     }
 
-    cur_duty_cycle = atoi(buf);
     ori_state = fan_state;
 
-    /* Inpunt temp to get theraml_polyc state and new pwm percent. */
-    for (i = 0; i < sizeof(fan_thermal_policy) / sizeof(fan_ctrl_policy_t); i++) {
-        if (temp > fan_thermal_policy[i].temp_down) {
-            if (temp <= fan_thermal_policy[i].temp_up) {
-                current_state =i;
-            }
+    int matched = -1;
+    for (i = 0; i < (int)(sizeof(fan_thermal_policy) / sizeof(fan_ctrl_policy_t)); i++) {
+        if (temp > fan_thermal_policy[i].temp_down &&
+            temp <= fan_thermal_policy[i].temp_up) {
+            matched = i;
         }
+    }
+    if (matched >= 0) {
+        current_state = matched;
+    } else if (temp > fan_thermal_policy[LEVEL_TEMP_CRITICAL].temp_up) {
+        /* Above top-most range: force to critical so fans go to max. */
+        AIM_LOG_WARN("manage_fans: temp=%d exceeds top policy range (%d), clamping to CRITICAL",
+                        temp, fan_thermal_policy[LEVEL_TEMP_CRITICAL].temp_up);
+        current_state = LEVEL_TEMP_CRITICAL;
+    } else {
+        /* Below the lowest range (or exactly at temp_down=0 boundary):
+            * keep LEVEL_FAN_MIN which is the safe idle state.
+            */
+        current_state = LEVEL_FAN_MIN;
     }
 
     if (current_state > LEVEL_TEMP_CRITICAL || current_state < LEVEL_FAN_MIN) {

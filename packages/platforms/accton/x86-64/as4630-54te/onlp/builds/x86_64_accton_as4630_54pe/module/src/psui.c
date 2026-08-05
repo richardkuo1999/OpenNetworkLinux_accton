@@ -102,6 +102,11 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
 
     VALIDATE(id);
 
+    /* Reject IDs outside the pinfo[] range before the array read below. */
+    if (index < PSU1_ID || index > PSU2_ID) {
+        return ONLP_STATUS_E_INVALID;
+    }
+
     memset(info, 0, sizeof(onlp_psu_info_t));
     *info = pinfo[index]; /* Set the onlp_oid_hdr_t */
 
@@ -121,7 +126,13 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
     /* Get power good status */
     if (psu_status_info_get(index, "psu_power_good", &val) != 0) {
         AIM_LOG_ERROR("Unable to read PSU(%d) node(psu_power_good)\r\n", index);
+        info->status |= ONLP_PSU_STATUS_FAILED;
         return ONLP_STATUS_E_INTERNAL;
+    }
+
+    if (val != PSU_STATUS_POWER_GOOD) {
+        info->status |= ONLP_PSU_STATUS_UNPLUGGED;
+        return ONLP_STATUS_OK;
     }
 
     /* Get PSU type
@@ -148,11 +159,6 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
         default:
             ret = ONLP_STATUS_E_UNSUPPORTED;
             break;
-    }
-
-    if (val != PSU_STATUS_POWER_GOOD) {
-        info->status |=  ONLP_PSU_STATUS_UNPLUGGED;
-        info->caps = 0;
     }
 
     return ret;

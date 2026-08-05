@@ -138,17 +138,24 @@ static ssize_t show_status(struct device *dev, struct device_attribute *da,
 	struct as4630_54te_psu_data *data = i2c_get_clientdata(client);
 	struct sensor_device_attribute *attr = to_sensor_dev_attr(da);
 	u8 status = 0;
+	ssize_t ret;
 
 	mutex_lock(&data->update_lock);
 	data = as4630_54te_psu_update_device(dev);
+	if (!data->valid) {
+		ret = -EIO;
+		goto out;
+	}
 
 	if (attr->index == PSU_PRESENT)
 		status = IS_PRESENT(data->index, data->status);
 	else /* PSU_POWER_GOOD */
 		status = IS_POWER_GOOD(data->index, data->status);
 
+	ret = sprintf(buf, "%d\n", status);
+out:
 	mutex_unlock(&data->update_lock);
-	return sprintf(buf, "%d\n", status);
+	return ret;
 }
 
 static ssize_t show_string(struct device *dev, struct device_attribute *da,
@@ -285,6 +292,7 @@ static void as4630_54te_psu_remove(struct i2c_client *client)
 
 	hwmon_device_unregister(data->hwmon_dev);
 	sysfs_remove_group(&client->dev.kobj, &as4630_54te_psu_group);
+	mutex_destroy(&data->update_lock);
 	kfree(data);
 }
 
@@ -383,6 +391,8 @@ as4630_54te_psu_data *as4630_54te_psu_update_device(struct device *dev)
 						client->addr, models_min_offset);
 				goto exit;
 			}
+
+			temp_model_name[MAX_MODEL_NAME] = '\0';
 
 			for (i = 0; i < ARRAY_SIZE(models); i++) {
 				if ((models[i].length+1) > ARRAY_SIZE(data->model_name)) {

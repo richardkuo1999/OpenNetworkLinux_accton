@@ -223,6 +223,12 @@ onlp_thermali_info_get(onlp_oid_t id, onlp_thermal_info_t* info)
     VALIDATE(id);
 
     tid = ONLP_OID_ID_GET(id);
+    /* Reject IDs outside the linfo[] / devfiles__[] range before use,
+     * otherwise the following array accesses read out of bounds.
+     */
+    if (tid < THERMAL_CPU_CORE || tid > THERMAL_1_ON_PSU2) {
+        return ONLP_STATUS_E_INVALID;
+    }
     int coretemp_max = 0, coretemp_temp = 0;
 
     /* Set the onlp_oid_hdr_t and capabilities */

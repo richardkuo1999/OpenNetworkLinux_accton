@@ -614,10 +614,16 @@ static ssize_t show_version(struct device *dev, struct device_attribute *da,
 
 static ssize_t show_bios_flash_id(struct device *dev, struct device_attribute *attr, char *buf)
 {
-    int val = 0;
+    int val;
     struct i2c_client *client = to_i2c_client(dev);
 
-    val = i2c_smbus_read_byte_data(client, 0x11);
+    val = as4630_54te_cpld_read_internal(client, 0x11);
+    if (val < 0) {
+        dev_warn_ratelimited(&client->dev,
+                             "cpld(0x%x) reg 0x11 read err %d\n",
+                             client->addr, val);
+        return val;
+    }
 
     return sprintf(buf, "%d\n", ( ((val >> 2) & 0x1) == 1 ) ? 1 : 2); /*(BIT2) 1: master, 2: slave*/
 }
@@ -970,7 +976,8 @@ static void as4630_54te_cpld_remove(struct i2c_client *client)
         sysfs_remove_group(&client->dev.kobj, group);
     }
 
-	kfree(data);
+    mutex_destroy(&data->update_lock);
+    kfree(data);
 }
 
 static int as4630_54te_cpld_read_internal(struct i2c_client *client, u8 reg)
