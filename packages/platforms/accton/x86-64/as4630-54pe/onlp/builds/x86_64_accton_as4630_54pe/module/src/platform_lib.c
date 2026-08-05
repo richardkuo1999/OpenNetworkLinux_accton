@@ -233,19 +233,27 @@ int psu_serial_number_get(int id, char *serial, int serial_len)
     int   ret  = ONLP_STATUS_OK; 
     char *prefix = NULL;
 
-    if (serial == NULL || serial_len < PSU_SERIAL_NUMBER_LEN) {
+    if (serial == NULL || serial_len < 2) {
         return ONLP_STATUS_E_PARAM;
     }
 
     prefix = (id == PSU1_ID) ? PSU1_AC_HWMON_PREFIX : PSU2_AC_HWMON_PREFIX;
+    serial[0] = '\0'; /* SN = NULL by default */
 
-    ret = onlp_file_read((uint8_t*)serial, PSU_SERIAL_NUMBER_LEN, &size, "%s%s", prefix, "psu_serial_number");
-    if (ret != ONLP_STATUS_OK || size != PSU_SERIAL_NUMBER_LEN) {
-        serial[0] = '\0'; /* SN = NULL */
-		return ONLP_STATUS_E_INTERNAL;
-
+    /* Read up to serial_len-1 bytes so the NUL terminator always fits.
+     * Different PSU models produce different serial lengths
+     * (9/17/18 chars + trailing '\n' from sysfs "%s\n" formatting),
+     * so we cannot hard-assert PSU_SERIAL_NUMBER_LEN(19). */
+    ret = onlp_file_read((uint8_t*)serial, serial_len - 1, &size, "%s%s", prefix, "psu_serial_number");
+    if (ret != ONLP_STATUS_OK || size <= 0) {
+        return ONLP_STATUS_E_INTERNAL;
     }
-    serial[PSU_SERIAL_NUMBER_LEN-1] = '\0';
+
+    /* Strip trailing newline that sysfs formatting appends. */
+    if (serial[size - 1] == '\n') {
+        size--;
+    }
+    serial[size] = '\0';
 
     return ONLP_STATUS_OK;
 }

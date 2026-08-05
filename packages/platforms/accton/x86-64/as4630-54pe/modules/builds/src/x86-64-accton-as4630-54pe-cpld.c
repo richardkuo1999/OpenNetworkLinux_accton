@@ -718,8 +718,9 @@ static u32 reg_val_to_speed_rpm(u8 reg_val)
 static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
                               const char *buf, size_t count)
 {
-    int error, value;
+    int error, value, status;
     struct i2c_client *client = to_i2c_client(dev);
+    struct as4630_54pe_cpld_data *data = i2c_get_clientdata(client);
 
     error = kstrtoint(buf, 10, &value);
     if (error)
@@ -728,9 +729,23 @@ static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
     if (value < 0 || value > FAN_MAX_DUTY_CYCLE)
         return -EINVAL;
 
-    as4630_54pe_cpld_write_internal(client, fan_reg[1], duty_cycle_to_reg_val(value));
-    as4630_54pe_cpld_write_internal(client, fan_reg[2], duty_cycle_to_reg_val(value));
+    mutex_lock(&data->update_lock);
+    status = as4630_54pe_cpld_write_internal(client, fan_reg[1], duty_cycle_to_reg_val(value));
+    if (status < 0) {
+        data->valid = 0;   /* invalidate cache on write failure */
+        goto exit;
+    }
+    status = as4630_54pe_cpld_write_internal(client, fan_reg[2], duty_cycle_to_reg_val(value));
+    if (status < 0) {
+        data->valid = 0;   /* invalidate cache on partial write failure */
+        goto exit;
+    }
+    data->valid = 0;   /* force refresh on next read */
+    mutex_unlock(&data->update_lock);
     return count;
+exit:
+    mutex_unlock(&data->update_lock);
+    return status;
 }
 
 static u8 reg_val_to_direction(u8 reg_val, enum fan_id id)
@@ -771,46 +786,55 @@ static ssize_t fan_show_value(struct device *dev, struct device_attribute *da,
                               char *buf)
 {
     u32 duty_cycle;
+    struct i2c_client *client = to_i2c_client(dev);
+    struct as4630_54pe_cpld_data *data = i2c_get_clientdata(client);
     struct sensor_device_attribute *attr = to_sensor_dev_attr(da);
-    struct as4630_54pe_cpld_data *data = as4630_54pe_fan_update_device(dev);
     ssize_t ret = 0;
 
-    if (data->valid) {
-        switch (attr->index)
-        {
-            case FAN_PRESENT_1:
-            case FAN_PRESENT_2:
-            case FAN_PRESENT_3:
-                ret = sprintf(buf, "%d\n",
-                          reg_val_to_is_present(data->reg_fan_val[0],
-                                                attr->index - FAN_PRESENT_1));
-                break;
-            case FAN_DUTY_CYCLE_PERCENTAGE:        
-                duty_cycle = reg_val_to_duty_cycle(data->reg_fan_val[1]);
-                ret = sprintf(buf, "%u\n", duty_cycle);
-                break;
-            case FAN_SPEED_RPM_1:
-            case FAN_SPEED_RPM_2:
-            case FAN_SPEED_RPM_3:
-                ret = sprintf(buf, "%u\n", reg_val_to_speed_rpm(data->reg_fan_val[attr->index-FAN_SPEED_RPM_1+3]));
-                break;   
-            case FAN_FAULT_1:
-            case FAN_FAULT_2:
-            case FAN_FAULT_3:        
-                ret = sprintf(buf, "%d\n", is_fan_fault(data, attr->index - FAN_FAULT_1));
-                break;     
-            case FAN_DIRECTION_1:
-            case FAN_DIRECTION_2:
-            case FAN_DIRECTION_3:
-                ret = sprintf(buf, "%d\n",
-                              reg_val_to_direction(data->reg_fan_val[0],
-                              attr->index - FAN_DIRECTION_1));
-                break;     
-            default:
-                break;
-        }
+    mutex_lock(&data->update_lock);
+
+    data = as4630_54pe_fan_update_device(dev);
+    if (!data->valid) {
+        ret = -EIO;
+        goto exit;
     }
 
+    switch (attr->index)
+    {
+        case FAN_PRESENT_1:
+        case FAN_PRESENT_2:
+        case FAN_PRESENT_3:
+            ret = sprintf(buf, "%d\n",
+                        reg_val_to_is_present(data->reg_fan_val[0],
+                                            attr->index - FAN_PRESENT_1));
+            break;
+        case FAN_DUTY_CYCLE_PERCENTAGE:        
+            duty_cycle = reg_val_to_duty_cycle(data->reg_fan_val[1]);
+            ret = sprintf(buf, "%u\n", duty_cycle);
+            break;
+        case FAN_SPEED_RPM_1:
+        case FAN_SPEED_RPM_2:
+        case FAN_SPEED_RPM_3:
+            ret = sprintf(buf, "%u\n", reg_val_to_speed_rpm(data->reg_fan_val[attr->index-FAN_SPEED_RPM_1+3]));
+            break;   
+        case FAN_FAULT_1:
+        case FAN_FAULT_2:
+        case FAN_FAULT_3:        
+            ret = sprintf(buf, "%d\n", is_fan_fault(data, attr->index - FAN_FAULT_1));
+            break;     
+        case FAN_DIRECTION_1:
+        case FAN_DIRECTION_2:
+        case FAN_DIRECTION_3:
+            ret = sprintf(buf, "%d\n",
+                            reg_val_to_direction(data->reg_fan_val[0],
+                            attr->index - FAN_DIRECTION_1));
+            break;     
+        default:
+            break;
+    }
+
+exit:
+    mutex_unlock(&data->update_lock);
     return ret;
 }
 
@@ -818,8 +842,6 @@ static struct as4630_54pe_cpld_data *as4630_54pe_fan_update_device(struct device
 {
     struct i2c_client *client = to_i2c_client(dev);
     struct as4630_54pe_cpld_data *data = i2c_get_clientdata(client);
-
-    mutex_lock(&data->update_lock);
 
     if (time_after(jiffies, data->last_updated + HZ + HZ / 2) ||
             !data->valid) {
@@ -834,7 +856,6 @@ static struct as4630_54pe_cpld_data *as4630_54pe_fan_update_device(struct device
             int status = as4630_54pe_cpld_read_internal(client, fan_reg[i]);
             if (status < 0) {
                 data->valid = 0;
-                mutex_unlock(&data->update_lock);
                 dev_dbg(&client->dev, "reg 0x%x, err %d\n", fan_reg[i], status);
                 return data;
             }
@@ -846,8 +867,6 @@ static struct as4630_54pe_cpld_data *as4630_54pe_fan_update_device(struct device
         data->last_updated = jiffies;
         data->valid = 1;
     }
-
-    mutex_unlock(&data->update_lock);
 
     return data;
 }

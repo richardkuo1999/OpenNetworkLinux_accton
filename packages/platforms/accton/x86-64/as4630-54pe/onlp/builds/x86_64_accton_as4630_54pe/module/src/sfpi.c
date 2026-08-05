@@ -124,23 +124,22 @@ onlp_sfpi_presence_bitmap_get(onlp_sfp_bitmap_t* dst)
 int
 onlp_sfpi_rx_los_bitmap_get(onlp_sfp_bitmap_t* dst)
 {
-    uint32_t bytes[8];
-    int i = 0;
-    uint64_t rx_los_all = 0;
+    int port;
+    int value;
 
-    bytes[0]=bytes[1]=bytes[2]=bytes[3]=bytes[4]=bytes[5]=0x0;
-    bytes[6]=0x0f;
-    bytes[7]=0x0;
+    AIM_BITMAP_CLR_ALL(dst);
 
-    for(i = AIM_ARRAYSIZE(bytes)-1; i >= 0; i--) {
-        rx_los_all <<= 8;
-        rx_los_all |= bytes[i];
-    }
-
-    /* Populate bitmap */
-    for(i = 0; rx_los_all; i++) {
-        AIM_BITMAP_MOD(dst, i, (rx_los_all & 1));
-        rx_los_all >>= 1;
+    /* Only SFP+ ports 48..51 (platform port 49..52) expose rx_los;
+     * QSFP ports 52..53 do not carry this signal. Delegate to
+     * onlp_sfpi_control_get() so this API shares one sysfs source of
+     * truth with the per-port path (module_rx_los_<n> under the CPLD).
+     */
+    for (port = 48; port <= 51; port++) {
+        if (onlp_sfpi_control_get(port, ONLP_SFP_CONTROL_RX_LOS, &value) != ONLP_STATUS_OK) {
+            AIM_LOG_ERROR("Unable to read rx_los status from port(%d)\r\n", port);
+            continue;
+        }
+        AIM_BITMAP_MOD(dst, port, value ? 1 : 0);
     }
 
     return ONLP_STATUS_OK;

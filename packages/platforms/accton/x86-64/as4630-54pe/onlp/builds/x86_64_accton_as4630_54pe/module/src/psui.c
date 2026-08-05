@@ -168,6 +168,7 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
     /* Get the present state */
     if (psu_status_info_get(index, "psu_present", &val) != 0) {
         AIM_LOG_ERROR("Unable to read PSU(%d) node(psu_present)\r\n", index);
+        return ONLP_STATUS_E_INTERNAL;
     }
     
     if (val != PSU_STATUS_PRESENT) {

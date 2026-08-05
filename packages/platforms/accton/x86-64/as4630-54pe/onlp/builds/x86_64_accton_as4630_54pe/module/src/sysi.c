@@ -139,17 +139,23 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
         }
     }
 
-    onlp_file_read_str(&bios_ver, BIOS_VER_PATH);
-    
+    if (onlp_file_read_str(&bios_ver, BIOS_VER_PATH) < 0) {
+        bios_ver = NULL;
+    }
+
     snprintf(path, sizeof(path), IDPROM_PATH, 1+bus_offset);
-    onlp_onie_decode_file(&onie, path);
+    memset(&onie, 0, sizeof(onie));
+    if (onlp_onie_decode_file(&onie, path) < 0) {
+        AIM_LOG_ERROR("Unable to decode ONIE EEPROM from (%s)", path);
+    }
 
     pi->cpld_versions = aim_fstrdup("\r\n\t   CPU CPLD(0x65): %02X.%02X"
                                     "\r\n\t   Main CPLD(0x60): %02X.%02X\r\n"
                                     , v[0], v[1], v[2], v[3]);
 
     pi->other_versions = aim_fstrdup("\r\n\t   BIOS: %s\r\n\t   ONIE: %s",
-                                    bios_ver, onie.onie_version);
+                                    bios_ver ? bios_ver : "N/A",
+                                    onie.onie_version ? onie.onie_version : "N/A");
 
     AIM_FREE_IF_PTR(bios_ver);
     onlp_onie_info_free(&onie);
@@ -229,8 +235,7 @@ int onlp_sysi_platform_manage_fans(void)
     }
 
     
-    /* Get current fan pwm percent
-     */
+    /* Get current fan pwm percent */
     fd = open(FAN_SPEED_CTRL_PATH, O_RDONLY);
     if (fd == -1){
         AIM_LOG_ERROR("Unable to open fan speed control node (%s)", FAN_SPEED_CTRL_PATH);
@@ -244,16 +249,18 @@ int onlp_sysi_platform_manage_fans(void)
     }
     cur_duty_cycle = atoi(buf);
     ori_state=fan_state;
-    /* Inpunt temp to get theraml_polyc state and new pwm percent. */
+    /* Input temp to get thermal policy state and new pwm percent.
+     */
     for(i=0; i < sizeof(fan_thermal_policy)/sizeof(fan_ctrl_policy_t); i++)
     {
         if (temp > fan_thermal_policy[i].temp_down)
         {
-            if (temp <= fan_thermal_policy[i].temp_up)
-            {
-                current_state =i;
-            }
+            current_state = i;
         }
+    }
+    if (temp > fan_thermal_policy[LEVEL_TEMP_CRITICAL].temp_up)
+    {
+        AIM_LOG_ERROR("Total thermal reading %d mC exceeds top policy bucket (%d mC); clamped to CRITICAL\r\n", temp, fan_thermal_policy[LEVEL_TEMP_CRITICAL].temp_up);
     }
     if(current_state > LEVEL_TEMP_CRITICAL || current_state < LEVEL_FAN_MIN)
     {

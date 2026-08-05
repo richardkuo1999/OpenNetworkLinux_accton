@@ -278,9 +278,10 @@ static void accton_as4630_54pe_led_set(struct led_classdev *led_cdev,
     u8 reg	;
     mutex_lock(&ledctl->update_lock);
 
-    if( !accton_getLedReg(type, &reg))
+    if (accton_getLedReg(type, &reg))
     {
         dev_dbg(&ledctl->pdev->dev, "Not match item for %d.\n", type);
+        goto exit;
     }
     
     
@@ -479,11 +480,12 @@ static int accton_as4630_54pe_led_probe(struct platform_device *pdev)
 
         /* only unregister the LEDs that were successfully registered */
         for (j = 0; j < i; j++) {
-            led_classdev_unregister(&accton_as4630_54pe_leds[i]);
+            led_classdev_unregister(&accton_as4630_54pe_leds[j]);
         }
+        return ret;   /* propagate the real registration error */
     }
 
-    return ret;
+    return 0;
 }
 
 static int accton_as4630_54pe_led_remove(struct platform_device *pdev)
