@@ -177,21 +177,17 @@ onlp_sfpi_presence_bitmap_get(onlp_sfp_bitmap_t* dst)
 int
 onlp_sfpi_rx_los_bitmap_get(onlp_sfp_bitmap_t* dst)
 {
-    uint32_t bytes[5];
-    int i = 0;
-    uint64_t rx_los_all = 0;
-    
-    bytes[0]=bytes[1]=bytes[2]=bytes[3]=0x0;
-    bytes[4]=0x03;
-    for(i = AIM_ARRAYSIZE(bytes)-1; i >= 0; i--) {
-        rx_los_all <<= 8;
-        rx_los_all |= bytes[i];
-    }
+    int i, val;
 
-    /* Populate bitmap */
-    for(i = 0; rx_los_all; i++) {
-        AIM_BITMAP_MOD(dst, i, (rx_los_all & 1));
-        rx_los_all >>= 1;
+    AIM_BITMAP_CLR_ALL(dst);
+
+    /* Only SFP+ ports (32-33) support rx_los; QSFPs have no such signal. */
+    for (i = SFP_PORT_MIN; i <= SFP_PORT_MAX; i++) {
+        if (onlp_file_read_int(&val, MODULE_RXLOS_FORMAT, 21, 62, i+1) < 0) {
+            AIM_LOG_ERROR("Unable to read rx_los from port(%d)\r\n", i);
+            return ONLP_STATUS_E_INTERNAL;
+        }
+        AIM_BITMAP_MOD(dst, i, val);
     }
 
     return ONLP_STATUS_OK;

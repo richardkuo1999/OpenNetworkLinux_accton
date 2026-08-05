@@ -123,7 +123,7 @@ static onlp_led_info_t linfo[] =
         ONLP_LED_CAPS_AUTO
     },
     {
-        { ONLP_LED_ID_CREATE(LED_PSU2), "LED 4 (PSU2 LED)", 0 },
+        { ONLP_LED_ID_CREATE(LED_PSU2), "LED 5 (PSU2 LED)", 0 },
         ONLP_LED_STATUS_PRESENT,
         ONLP_LED_CAPS_AUTO
     },
@@ -141,7 +141,7 @@ static int driver_to_onlp_led_mode(enum onlp_led_id id, enum led_light_mode driv
         }
     }
 
-    return 0;
+    return -1;
 }
 
 static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led_mode)
@@ -156,7 +156,7 @@ static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led
         }
     }
 
-    return 0;
+    return -1;
 }
 
 /*
@@ -218,7 +218,12 @@ onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
         return ONLP_STATUS_E_INTERNAL;
     }
 
-    info->mode = driver_to_onlp_led_mode(local_id, atoi(data));
+    int mode = driver_to_onlp_led_mode(local_id, atoi(data));
+    if (mode < 0) {
+        /* No led_map[] entry: reject rather than fall back to 0 (LED_MODE_OFF). */
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+    info->mode = mode;
 
     /* Set the on/off status */
     if (info->mode != ONLP_LED_MODE_OFF) {
@@ -266,7 +271,12 @@ onlp_ledi_mode_set(onlp_oid_t id, onlp_led_mode_t mode)
     local_id = ONLP_OID_ID_GET(id);
     sprintf(fullpath, "%s%s/%s", prefix_path, last_path[local_id], filename);
 
-    if (onlp_file_write_integer(fullpath, onlp_to_driver_led_mode(local_id, mode)) != 0)
+    int driver_mode = onlp_to_driver_led_mode(local_id, mode);
+    if (driver_mode < 0) {
+        /* Unsupported (led, mode) pair: don't silently write 0 (=OFF). */
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+    if (onlp_file_write_integer(fullpath, driver_mode) != 0)
     {
         return ONLP_STATUS_E_INTERNAL;
     }
