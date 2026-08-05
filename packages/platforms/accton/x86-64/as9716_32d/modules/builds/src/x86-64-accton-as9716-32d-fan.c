@@ -229,6 +229,8 @@ static u32 reg_val_to_duty_cycle(u8 reg_val)
 
 static u8 duty_cycle_to_reg_val(u8 duty_cycle)
 {
+    if (duty_cycle < 7)
+        return 0;
     return ((u32)duty_cycle * 100 / 625) - 1;
 }
 
@@ -398,7 +400,6 @@ static struct as9716_32d_fan_data *as9716_32d_fan_update_device(struct device *d
             int status = as9716_32d_fan_read_value(client, fan_reg[i]);
             if (status < 0) {
                 data->valid = 0;
-                mutex_unlock(&data->update_lock);
                 dev_dbg(&client->dev, "reg %d, err %d\n", fan_reg[i], status);
                 return data;
             }

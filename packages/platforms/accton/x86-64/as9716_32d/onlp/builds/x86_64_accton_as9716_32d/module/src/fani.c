@@ -188,6 +188,12 @@ _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
     int val = 0;
 
+    if (psu_status_info_get(pid, "psu_present", &val) != ONLP_STATUS_OK ||
+        val != PSU_STATUS_PRESENT) {
+        info->status &= ~ONLP_FAN_STATUS_PRESENT;
+        return ONLP_STATUS_OK;
+    }
+
     info->status |= ONLP_FAN_STATUS_PRESENT;
 
     /* Get power good status */

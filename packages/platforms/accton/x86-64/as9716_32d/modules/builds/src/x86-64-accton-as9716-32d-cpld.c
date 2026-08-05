@@ -188,7 +188,7 @@ static ssize_t set_reset(struct device *dev, struct device_attribute *da,
     static SENSOR_DEVICE_ATTR(module_present_##index, S_IRUGO, show_status, NULL, MODULE_PRESENT_##index); \
 	static SENSOR_DEVICE_ATTR(module_tx_disable_##index, S_IRUGO | S_IWUSR, show_status, set_tx_disable, MODULE_TXDISABLE_##index); \
 	static SENSOR_DEVICE_ATTR(module_rx_los_##index, S_IRUGO, show_status, NULL, MODULE_RXLOS_##index);  \
-	static SENSOR_DEVICE_ATTR(module_tx_fault_##index, S_IRUGO, show_status, NULL, MODULE_RXLOS_##index); 
+	static SENSOR_DEVICE_ATTR(module_tx_fault_##index, S_IRUGO, show_status, NULL, MODULE_TXFAULT_##index); 
 	
 #define DECLARE_SFP_TRANSCEIVER_ATTR(index)  \
     &sensor_dev_attr_module_present_##index.dev_attr.attr, \
@@ -358,6 +358,14 @@ static ssize_t show_status(struct device *dev, struct device_attribute *da,
         reg  = 0x20;
         mask = 0x10;
         break;    
+    case MODULE_TXFAULT_33:
+        reg  = 0x20;
+        mask = 0x4;
+        break;
+    case MODULE_TXFAULT_34:
+        reg  = 0x20;
+        mask = 0x20;
+        break;
 	case MODULE_TXDISABLE_33:
 		reg  = 0x21;
 		mask = 0x1;
@@ -668,7 +676,7 @@ static ssize_t set_reset(struct device *dev, struct device_attribute *da,
 	struct as9716_32d_cpld_data *data = i2c_get_clientdata(client);
 	long value;
 	int status;
-	u8 reg = 0, mask_mac, mask_pcie = 0;
+	u8 reg = 0, mask_mac = 0, mask_pcie = 0;
 
 	status = kstrtol(buf, 10, &value);
 

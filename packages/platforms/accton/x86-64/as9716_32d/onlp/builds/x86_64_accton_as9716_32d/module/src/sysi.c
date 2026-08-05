@@ -132,13 +132,18 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
     char *mfu_ver = NULL;
     const char *bios = "";
     const char *mfu = "";
+    const char *onie_ver = "";
     char *paths[] = {IDPROM_PATH_2, IDPROM_PATH_1};
+
+    memset(&onie, 0, sizeof(onie));
 
     for (i = 0 ; i < AIM_ARRAYSIZE(paths); i++ ){
         rv = onlp_onie_decode_file(&onie, paths[i]);
         /* Decode succeeded if rv >= 0 */
-        if(rv >= 0)
+        if(rv >= 0) {
+            onie_ver = onie.onie_version;
             break;
+        }
     }
 
     for (i = 0; i < NUM_OF_CPLD; i++) {
@@ -163,7 +168,7 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
 
     pi->other_versions = aim_fstrdup("\r\n\t   BIOS: %s\r\n\t   ONIE: %s"
                                      "\r\n\t   MFU: %s",
-                                    bios, onie.onie_version, mfu);
+                                    bios, onie_ver, mfu);
 
     onlp_onie_info_free(&onie);
     AIM_FREE_IF_PTR(bios_ver);
@@ -368,7 +373,6 @@ fan_ctrl_policy_t  fan_thermal_policy_b2f[] = { /*AFI*/
 void onlp_sysi_shutdown(void)
 {
     char cmd_str[64];
-    memset(cmd_str, 0x0, strlen(cmd_str));    
     snprintf(cmd_str, 63, "i2cset -y -f 19 0x60 0x60 0x10");
     system(cmd_str); 
 }
@@ -481,7 +485,9 @@ int onlp_sysi_platform_manage_fans(void)
     /* Get fan direction
      */
     if (onlp_file_read_int(&direction_val, FAN_DIRECTION_PATH) < 0) {
-        AIM_LOG_ERROR("Unable to read status from file (%s)\r\n", FAN_DIRECTION_PATH); 
+        AIM_LOG_ERROR("Unable to read fan direction from (%s), using default AFI\r\n",
+                      FAN_DIRECTION_PATH);
+        /* direction_val remains 1 (AFI) as initialized above. */
     }
 
     if(fan_state==LEVEL_FAN_INIT)
@@ -504,6 +510,10 @@ int onlp_sysi_platform_manage_fans(void)
         {
             AIM_LOG_ERROR("Unable to read thermal status, set fans to full speed");
             onlp_fani_percentage_set(ONLP_FAN_ID_CREATE(1), 100);
+            /* Sync cached state to MAX so next cycle's ori_state starts from
+             * MAX even if thermal read recovers — otherwise fan would be
+             * silently downgraded from 100% back to MID/MIN. */
+            fan_state = LEVEL_FAN_MAX;
             return ONLP_STATUS_E_INTERNAL;
        }
         k++; 
@@ -514,6 +524,7 @@ int onlp_sysi_platform_manage_fans(void)
         {
             AIM_LOG_ERROR("Unable to read thermal status, set fans to full speed");
             onlp_fani_percentage_set(ONLP_FAN_ID_CREATE(1), 100);
+            fan_state = LEVEL_FAN_MAX;
             return ONLP_STATUS_E_INTERNAL;
         }
         k++; 
@@ -522,12 +533,14 @@ int onlp_sysi_platform_manage_fans(void)
     {
         AIM_LOG_ERROR("Unable to read thermal status, set fans to full speed");
         onlp_fani_percentage_set(ONLP_FAN_ID_CREATE(1), 100);
+        fan_state = LEVEL_FAN_MAX;
         return ONLP_STATUS_E_INTERNAL;
     }
     if (onlp_thermali_info_get(ONLP_THERMAL_ID_CREATE(5), &thermal[7]) != ONLP_STATUS_OK  )
     {
         AIM_LOG_ERROR("Unable to read thermal status, set fans to  full speed");
         onlp_fani_percentage_set(ONLP_FAN_ID_CREATE(1), 100);
+        fan_state = LEVEL_FAN_MAX;
         return ONLP_STATUS_E_INTERNAL;
     }
     /* Get current fan pwm percent
@@ -537,12 +550,13 @@ int onlp_sysi_platform_manage_fans(void)
         AIM_LOG_ERROR("Unable to open fan speed control node (%s)", FAN_SPEED_CTRL_PATH);
         return ONLP_STATUS_E_INTERNAL;
     }
-    len = read(fd, buf, sizeof(buf));
+    len = read(fd, buf, sizeof(buf)-1);
     close(fd);    
     if (len <= 0) {
         AIM_LOG_ERROR("Unable to read fan speed from (%s)", FAN_SPEED_CTRL_PATH);
         return ONLP_STATUS_E_INTERNAL;
     }
+    buf[len] = '\0';
     current_duty_cycle = atoi(buf);
     ori_state=fan_state;
     current_state=fan_state;
@@ -721,6 +735,15 @@ int onlp_sysi_platform_manage_fans(void)
         }
         fan_fail=0;
     }
+
+    /* If any fan is failing/missing this cycle, the fan-status loop above
+     * has already forced fan_state to LEVEL_FAN_MAX and hardware duty to 100%.
+     * Do NOT overwrite fan_state with the thermal-decision current_state here —
+     * that would silently downgrade the cached state to MID/MIN and mask the
+     * fail-safe once the fan recovers next cycle. */
+    if (fan_fail)
+        return 0;
+
     if(current_state!=ori_state)
     {
         fan_state=current_state;

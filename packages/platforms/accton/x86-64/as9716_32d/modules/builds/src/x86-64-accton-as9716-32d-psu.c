@@ -327,7 +327,11 @@ static struct as9716_32d_psu_data *as9716_32d_psu_update_device(struct device *d
             }
             else if (!strncmp(data->model_name, "YESM1300", strlen("YESM1300")))
             {
-                /* Adjust model name for YESM1300AM-2A01P10 and YESM1300AM-2R01P10 */
+                /* EEPROM stores model name with a non-ASCII byte (0xCB) at
+                * offset 8, between "YESM1300" and "AM-2A01P10". Remove it
+                * so the resulting string "YESM1300AM-2A01P10" (18 chars) can        
+                * be matched by strncmp() in the SN-length logic below and
+                * by get_psu_type() in platform_lib.c for F2B/B2F detection. */      
                 memmove(&data->model_name[8], &data->model_name[9], 10);
                 if (data->model_name[8]=='A' && data->model_name[9]=='M')
                 {

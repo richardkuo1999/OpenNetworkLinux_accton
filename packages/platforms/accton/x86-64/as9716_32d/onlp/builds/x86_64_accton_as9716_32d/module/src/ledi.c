@@ -123,7 +123,7 @@ static onlp_led_info_t linfo[] =
         ONLP_LED_CAPS_AUTO
     },
     {
-        { ONLP_LED_ID_CREATE(LED_PSU2), "LED 4 (PSU2 LED)", 0 },
+        { ONLP_LED_ID_CREATE(LED_PSU2), "LED 5 (PSU2 LED)", 0 },
         ONLP_LED_STATUS_PRESENT,
         ONLP_LED_CAPS_AUTO
     },

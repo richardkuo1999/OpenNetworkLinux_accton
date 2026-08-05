@@ -58,7 +58,7 @@ static struct accton_as9716_32d_led_data  *ledctl = NULL;
 
 
 #define LED_TYPE_LOC_REG_MASK	        (0x80|0x40)
-#define LED_MODE_LOC_GREEN_BLIKN_VALUE   0x80
+#define LED_MODE_LOC_GREEN_BLINK_VALUE   0x80
 #define LED_MODE_LOC_AMBER_VALUE         0x40
 #define LED_MODE_LOC_OFF_VALUE	        (0x0)
 
@@ -119,7 +119,7 @@ struct led_type_mode {
 
 static struct led_type_mode led_type_mode_data[] = {
   {LED_TYPE_LOC, LED_MODE_OFF,         LED_TYPE_LOC_REG_MASK, LED_MODE_LOC_OFF_VALUE},
-  {LED_TYPE_LOC, LED_MODE_GREEN_BLINK, LED_TYPE_LOC_REG_MASK, LED_MODE_LOC_GREEN_BLIKN_VALUE},
+  {LED_TYPE_LOC, LED_MODE_GREEN_BLINK, LED_TYPE_LOC_REG_MASK, LED_MODE_LOC_GREEN_BLINK_VALUE},
   {LED_TYPE_LOC, LED_MODE_AMBER,	   LED_TYPE_LOC_REG_MASK, LED_MODE_LOC_AMBER_VALUE},  
   {LED_TYPE_DIAG,LED_MODE_OFF,   LED_TYPE_DIAG_REG_MASK,  LED_MODE_DIAG_OFF_VALUE},
   {LED_TYPE_DIAG,LED_MODE_GREEN, LED_TYPE_DIAG_REG_MASK,  LED_MODE_DIAG_GREEN_VALUE},  
@@ -252,9 +252,10 @@ static void accton_as9716_32d_led_set(struct led_classdev *led_cdev,
     u8 reg	;
     mutex_lock(&ledctl->update_lock);
 
-    if( !accton_getLedReg(type, &reg))
+    if (accton_getLedReg(type, &reg))
     {
         dev_dbg(&ledctl->pdev->dev, "Not match item for %d.\n", type);
+        goto exit;
     }
     
     reg_val = accton_as9716_32d_led_read_value(reg);
@@ -395,7 +396,7 @@ static int accton_as9716_32d_led_probe(struct platform_device *pdev)
 
         /* only unregister the LEDs that were successfully registered */
         for (j = 0; j < i; j++) {
-            led_classdev_unregister(&accton_as9716_32d_leds[i]);
+            led_classdev_unregister(&accton_as9716_32d_leds[j]);
         }
     }
 
