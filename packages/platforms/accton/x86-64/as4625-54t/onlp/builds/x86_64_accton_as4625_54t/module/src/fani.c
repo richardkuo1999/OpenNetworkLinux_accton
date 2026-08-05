@@ -79,22 +79,32 @@ static int
 _onlp_fani_info_get_fan(int fid, onlp_fan_info_t* info)
 {
 	int value;
+	int rpm = 0, fault = 0;
 
-	/* get fan present status
-	 */
-	info->status |= ONLP_FAN_STATUS_PRESENT;
 
-	/* get fan fault status (turn on when any one fails)
-	 */
-	if (onlp_file_read_int(&value, "%s""fan%d_fault", 
+	/* get fan fault status (turn on when any one fails) */
+	if (onlp_file_read_int(&fault, "%s""fan%d_fault",
 				FAN_NODE_PATH, fid) < 0) {
-		AIM_LOG_ERROR("Unable to read fan fault status from (%s)\r\n", 
+		AIM_LOG_ERROR("Unable to read fan fault status from (%s)\r\n",
 				FAN_NODE_PATH);
 		return ONLP_STATUS_E_INTERNAL;
 	}
-	if (value > 0)
+
+	/* fan speed (rpm) - also used to derive presence */
+	if (onlp_file_read_int(&rpm, "%s""fan%d_input",
+				FAN_NODE_PATH, fid) < 0) {
+		AIM_LOG_ERROR("Unable to read fan speed from (%s)\r\n",
+				FAN_NODE_PATH);
+		return ONLP_STATUS_E_INTERNAL;
+	}
+
+	if (rpm > 0)
+		info->status |= ONLP_FAN_STATUS_PRESENT;
+	if (fault > 0 ||
+	    ((info->status & ONLP_FAN_STATUS_PRESENT) && rpm == 0))
 		info->status |= ONLP_FAN_STATUS_FAILED;
 
+	info->rpm = rpm;
 
 	/* get fan direction (both : the same)
 	 */
@@ -106,16 +116,6 @@ _onlp_fani_info_get_fan(int fid, onlp_fan_info_t* info)
 	}
 	info->status |= (value == 2) ? ONLP_FAN_STATUS_B2F : ONLP_FAN_STATUS_F2B;
 
-	/* get fan speed
-	 */
-	if (onlp_file_read_int(&value, "%s""fan%d_input", 
-				FAN_NODE_PATH, fid) < 0) {
-		AIM_LOG_ERROR("Unable to read fan speed from (%s)\r\n", 
-				FAN_NODE_PATH);
-		
-		return ONLP_STATUS_E_INTERNAL;
-	}
-	info->rpm = value;
 
 	/* get pwm percentage
 	 */
@@ -155,6 +155,17 @@ static int
 _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
 	int val = 0;
+
+	/* If the parent PSU is not present, its embedded fan does not exist.
+	 * Mirror the presence-check pattern used by onlp_psui_info_get(). */
+	if (psu_status_info_get(pid, "psu_present", &val) != ONLP_STATUS_OK) {
+		AIM_LOG_ERROR("Unable to read PSU(%d) node(psu_present)\r\n", pid);
+		return ONLP_STATUS_E_INTERNAL;
+	}
+	if (val != PSU_STATUS_PRESENT) {
+		info->status = 0;
+		return ONLP_STATUS_OK;
+	}
 
 	info->status |= ONLP_FAN_STATUS_PRESENT;
 
@@ -196,6 +207,10 @@ onlp_fani_info_get(onlp_oid_t id, onlp_fan_info_t* info)
 	VALIDATE(id);
 
 	fid = ONLP_OID_ID_GET(id);
+
+	if (fid < FAN_1_ON_FAN_BOARD || fid > FAN_1_ON_PSU_2)
+		return ONLP_STATUS_E_INVALID;
+
 	*info = finfo[fid];
 
 	switch (fid) {

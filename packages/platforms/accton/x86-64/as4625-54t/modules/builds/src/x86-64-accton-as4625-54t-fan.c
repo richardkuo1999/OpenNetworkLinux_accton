@@ -191,12 +191,16 @@ static u32 reg_val_to_duty_cycle(u8 reg_val)
 
 static u8 duty_cycle_to_reg_val(u8 duty_cycle)
 {
-	if (duty_cycle == 0)
-		return 0;
-	else if (duty_cycle > FAN_MAX_DUTY_CYCLE)
+	u32 reg;
+
+	if (duty_cycle > FAN_MAX_DUTY_CYCLE)
 		duty_cycle = FAN_MAX_DUTY_CYCLE;
 
-	return ((u32)duty_cycle * 100 / 625) - 1;
+	reg = (u32)duty_cycle * 100 / 625;
+	if (reg == 0)
+		reg = 1;
+
+	return (u8)((reg - 1) & FAN_DUTY_CYCLE_REG_MASK);
 }
 
 static u32 reg_val_to_speed_rpm(u8 reg_val)
@@ -225,8 +229,12 @@ static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
 	mutex_lock(&data->update_lock);
 
 	reg = fan_reg[attr->index - FAN1_PWM];
-	as4625_fan_write_value(reg, duty_cycle_to_reg_val(value));
+	error = as4625_fan_write_value(reg, duty_cycle_to_reg_val(value));
 	data->valid = 0;
+	if (error < 0) {
+		mutex_unlock(&data->update_lock);
+		return error;
+	}
 
 	mutex_unlock(&data->update_lock);
 	return count;
@@ -320,7 +328,6 @@ static struct as4625_fan_data *as4625_fan_update_device(struct device *dev)
 
 			if (status < 0) {
 				data->valid = 0;
-				mutex_unlock(&data->update_lock);
 				dev_dbg(&data->pdev->dev, "reg %d, err %d\n", 
 					fan_reg[i], status);
 				return data;
@@ -360,11 +367,13 @@ static const struct hwmon_chip_info as4625_fan_chip_info = {
 static int as4625_fan_probe(struct platform_device *pdev)
 {
 	int status;
+	data->pdev = pdev;
 
 	data->hwmon_dev = hwmon_device_register_with_info(&pdev->dev,
 						DRVNAME, NULL, &as4625_fan_chip_info, NULL);
 	if (IS_ERR(data->hwmon_dev)) {
 		status = PTR_ERR(data->hwmon_dev);
+		data->pdev = NULL;
 		return status;
 	}
 
@@ -378,6 +387,7 @@ static int as4625_fan_probe(struct platform_device *pdev)
 
 exit_remove:
 	hwmon_device_unregister(data->hwmon_dev);
+	data->pdev = NULL;
 	return status;
 }
 

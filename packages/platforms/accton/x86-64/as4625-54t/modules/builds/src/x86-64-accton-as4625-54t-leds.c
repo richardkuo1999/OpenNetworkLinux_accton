@@ -326,7 +326,7 @@ static int as4625_led_probe(struct platform_device *pdev)
 
 		/* only unregister the LEDs that were successfully registered */
 		for (j = 0; j < i; j++)
-			led_classdev_unregister(&as4625_leds[i]);
+			led_classdev_unregister(&as4625_leds[j]);
 	}
 
 	return ret;

@@ -321,6 +321,10 @@ onlp_thermali_info_get(onlp_oid_t id, onlp_thermal_info_t* info)
 	VALIDATE(id);
 
 	tid = ONLP_OID_ID_GET(id);
+
+	if (tid <= THERMAL_RESERVED || tid >= THERMAL_COUNT)
+		return ONLP_STATUS_E_INVALID;
+
 	dir = onlp_get_fan_dir();
 
 	/* Set the onlp_oid_hdr_t and capabilities */
@@ -349,6 +353,18 @@ onlp_thermali_info_get(onlp_oid_t id, onlp_thermal_info_t* info)
 
     if (tid >= psu_tid_start) {
         psu_id = ( tid <= THERMAL_2_ON_PSU1 ) ? PSU1_ID : PSU2_ID;
+
+        /* If the parent PSU is not present, this thermal sensor does not exist either. */
+        if (psu_status_info_get(psu_id, "psu_present", &val) != ONLP_STATUS_OK) {
+            AIM_LOG_ERROR("Unable to read PSU(%d) node(psu_present)\r\n", psu_id);
+            return ONLP_STATUS_E_INTERNAL;
+        }
+        if (val != PSU_STATUS_PRESENT) {
+            info->status &= ~ONLP_THERMAL_STATUS_PRESENT;
+            info->mcelsius = 0;
+            return ONLP_STATUS_OK;
+        }
+
         /* Get power good status */
         if (psu_status_info_get(psu_id, "psu_power_good", &val) == ONLP_STATUS_OK) {
             if(val != PSU_STATUS_POWER_GOOD) {

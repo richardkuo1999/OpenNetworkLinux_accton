@@ -311,7 +311,7 @@ static int as4625_54t_psu_read_bytes(struct i2c_client *client, u8 command,
 		ssize_t status;
 
 		status = as4625_54t_psu_read_byte(client, command, data);
-		if (status <= 0) {
+		if (status < 0) {
 			ret = status;
 			break;
 		}
@@ -381,6 +381,8 @@ static struct as4625_54t_psu_data *as4625_54t_psu_update_device(struct device *d
 				memcpy(data->fan_dir, FAN_DIR_F2B, sizeof(FAN_DIR_F2B));
 			else if (strncmp(data->model_name, "UPD1501SA-1279G", ARRAY_SIZE(data->model_name)-1) == 0)
 				memcpy(data->fan_dir, FAN_DIR_B2F, sizeof(FAN_DIR_B2F));
+			else if (strncmp(data->model_name, "UP1K21R-1085G", strlen("UP1K21R-1085G")) == 0)
+				memcpy(data->fan_dir, FAN_DIR_F2B, sizeof(FAN_DIR_F2B));
 			else
 				data->fan_dir[0] = '\0';
 		}

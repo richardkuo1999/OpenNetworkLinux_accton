@@ -111,6 +111,9 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
 
 	VALIDATE(id);
 
+	if (index < PSU1_ID || index > PSU2_ID)
+		return ONLP_STATUS_E_INVALID;
+
 	memset(info, 0, sizeof(onlp_psu_info_t));
 	*info = pinfo[index]; /* Set the onlp_oid_hdr_t */
 

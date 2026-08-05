@@ -124,10 +124,12 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
         strcpy(prefix_path, PREFIX_PATH_ON_BUS1_CPLD);
 
     if(onlp_file_read_int(&ver_major, "%s/version_major", prefix_path) < 0)
-        AIM_LOG_ERROR("Unable to read cpld major version of %s \r\n");
+        AIM_LOG_ERROR("Unable to read cpld major version at path (%s)\r\n",
+                      prefix_path);
 
     if(onlp_file_read_int(&ver_minor, "%s/version_minor", prefix_path) < 0)
-        AIM_LOG_ERROR("Unable to read cpld minor version of %s \r\n");
+        AIM_LOG_ERROR("Unable to read cpld minor version at path (%s)\r\n",
+                      prefix_path);
 
     pi->cpld_versions = aim_fstrdup("\r\n\t   Main CPLD(0x64): %02X.%02X\r\n",
                                     ver_major, ver_minor);
