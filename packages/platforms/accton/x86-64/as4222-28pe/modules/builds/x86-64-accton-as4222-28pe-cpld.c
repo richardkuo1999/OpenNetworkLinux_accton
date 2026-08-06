@@ -140,7 +140,7 @@ static ssize_t show_power(struct device *dev, struct device_attribute *da,
     static SENSOR_DEVICE_ATTR(module_present_##index, S_IRUGO, show_status, NULL, MODULE_PRESENT_##index); \
 	static SENSOR_DEVICE_ATTR(module_tx_disable_##index, S_IRUGO | S_IWUSR, show_status, set_tx_disable, MODULE_TXDISABLE_##index); \
 	static SENSOR_DEVICE_ATTR(module_rx_los_##index, S_IRUGO, show_status, NULL, MODULE_RXLOS_##index);  \
-	static SENSOR_DEVICE_ATTR(module_tx_fault_##index, S_IRUGO, show_status, NULL, MODULE_RXLOS_##index); 
+	static SENSOR_DEVICE_ATTR(module_tx_fault_##index, S_IRUGO, show_status, NULL, MODULE_TXFAULT_##index); 
 	
 #define DECLARE_SFP_TRANSCEIVER_ATTR(index)  \
     &sensor_dev_attr_module_present_##index.dev_attr.attr, \
@@ -422,8 +422,9 @@ static u32 reg_val_to_speed_rpm(u8 reg_val)
 static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
                               const char *buf, size_t count)
 {
-    int error, value;
+    int error, value, status;
     struct i2c_client *client = to_i2c_client(dev);
+    struct as4222_28pe_cpld_data *data = i2c_get_clientdata(client);
 
     error = kstrtoint(buf, 10, &value);
     if (error)
@@ -431,9 +432,15 @@ static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
 
     if (value < 0 || value > FAN_MAX_DUTY_CYCLE)
         return -EINVAL;
-    
-    as4222_28pe_cpld_write_internal(client, fan_reg[0], duty_cycle_to_reg_val(value));
-    return count;
+
+    mutex_lock(&data->update_lock);
+    status = as4222_28pe_cpld_write_internal(client, fan_reg[0],
+                                             duty_cycle_to_reg_val((u8)value));
+    if (status >= 0)
+        data->valid = 0;    /* force refresh in next fan_show_value */
+    mutex_unlock(&data->update_lock);
+
+    return (status < 0) ? status : count;
 }
 
 static ssize_t fan_show_value(struct device *dev, struct device_attribute *da,

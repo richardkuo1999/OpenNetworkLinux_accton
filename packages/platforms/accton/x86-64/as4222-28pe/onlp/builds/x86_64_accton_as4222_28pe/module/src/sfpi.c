@@ -52,9 +52,9 @@ onlp_sfpi_init(void)
 int
 onlp_sfpi_map_bus_index(int port)
 {
-    if(port < 24 || port >=27)
+    if (port < 24 || port > 27)
         return ONLP_STATUS_E_INTERNAL;
-    port= port-24;
+    port = port - 24;
     return sfp_map_bus[port];
 }
 
@@ -106,23 +106,12 @@ onlp_sfpi_presence_bitmap_get(onlp_sfp_bitmap_t* dst)
 int
 onlp_sfpi_rx_los_bitmap_get(onlp_sfp_bitmap_t* dst)
 {
-    uint32_t bytes[4];
-    int i = 0;
-    uint64_t rx_los_all = 0;
-    
-    bytes[0]=bytes[1]=bytes[2]=0x0;
-    bytes[3]=0xf;
-    for(i = AIM_ARRAYSIZE(bytes)-1; i >= 0; i--) {
-        rx_los_all <<= 8;
-        rx_los_all |= bytes[i];
-    }
-    /* Populate bitmap */
-    for(i = 0; rx_los_all; i++) {
-        AIM_BITMAP_MOD(dst, i, (rx_los_all & 1));
-        rx_los_all >>= 1;
-    }
-
-    return ONLP_STATUS_OK;
+    /*
+     * Bitmap is not implemented; return E_UNSUPPORTED and let ONLP core
+     * fall back to per-port onlp_sfpi_control_get(RX_LOS), which reads the
+     * real MODULE_RXLOS sysfs exposed by the CPLD driver.
+     */
+    return ONLP_STATUS_E_UNSUPPORTED;
 }
 
 int
@@ -223,7 +212,7 @@ onlp_sfpi_control_set(int port, onlp_sfp_control_t control, int value)
     {
         case ONLP_SFP_CONTROL_TX_DISABLE:
             {
-                if (onlp_file_write_int(0, MODULE_TXDISABLE_FORMAT, bus, addr, (port+1)) < 0) {
+                if (onlp_file_write_int(value, MODULE_TXDISABLE_FORMAT, bus, addr, (port+1)) < 0) {
                     AIM_LOG_ERROR("Unable to set tx_disable status to port(%d)\r\n", port);
                     rv = ONLP_STATUS_E_INTERNAL;   
                 }                 

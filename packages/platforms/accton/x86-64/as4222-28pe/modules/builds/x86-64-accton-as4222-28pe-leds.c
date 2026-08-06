@@ -40,7 +40,7 @@ struct accton_as4222_28pe_led_data {
     struct mutex	 update_lock;
     char			 valid;		   /* != 0 if registers are valid */
     unsigned long	last_updated;	/* In jiffies */
-    u8			   reg_val[1];	  /* only 1 register*/
+    u8			   reg_val[2];	  /* one entry per led_reg_map row (0x1a for DIAG/PSU, 0x1b for POE/FAN) */
 };
 
 static struct accton_as4222_28pe_led_data  *ledctl = NULL;
@@ -222,12 +222,13 @@ static void accton_as4222_28pe_led_set(struct led_classdev *led_cdev,
                                       enum led_type type)
 {
     int reg_val;
-    u8 reg	;
+    u8 reg = 0;
     mutex_lock(&ledctl->update_lock);
 
-    if( !accton_getLedReg(type, &reg))
+    if (accton_getLedReg(type, &reg))
     {
         dev_dbg(&ledctl->pdev->dev, "Not match item for %d.\n", type);
+        goto exit;
     }
     reg_val = accton_as4222_28pe_led_read_value(reg);
     
@@ -266,7 +267,7 @@ static void accton_as4222_28pe_led_poe_set(struct led_classdev *led_cdev,
 static enum led_brightness accton_as4222_28pe_led_poe_get(struct led_classdev *cdev)
 {
     accton_as4222_28pe_led_update();
-    return led_reg_val_to_light_mode(LED_TYPE_POE, ledctl->reg_val[0]);
+    return led_reg_val_to_light_mode(LED_TYPE_POE, ledctl->reg_val[1]);
 }
 
 static void accton_as4222_28pe_led_fan_set(struct led_classdev *led_cdev,
@@ -278,7 +279,7 @@ static void accton_as4222_28pe_led_fan_set(struct led_classdev *led_cdev,
 static enum led_brightness accton_as4222_28pe_led_fan_get(struct led_classdev *cdev)
 {
     accton_as4222_28pe_led_update();
-    return led_reg_val_to_light_mode(LED_TYPE_FAN, ledctl->reg_val[0]);
+    return led_reg_val_to_light_mode(LED_TYPE_FAN, ledctl->reg_val[1]);
 }
 
 static void accton_as4222_28pe_led_psu_set(struct led_classdev *led_cdev,
@@ -369,7 +370,7 @@ static int accton_as4222_28pe_led_probe(struct platform_device *pdev)
 
         /* only unregister the LEDs that were successfully registered */
         for (j = 0; j < i; j++) {
-            led_classdev_unregister(&accton_as4222_28pe_leds[i]);
+            led_classdev_unregister(&accton_as4222_28pe_leds[j]);
         }
     }
 

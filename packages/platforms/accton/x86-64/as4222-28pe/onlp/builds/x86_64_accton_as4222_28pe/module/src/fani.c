@@ -78,10 +78,6 @@ _onlp_fani_info_get_fan(int fid, onlp_fan_info_t* info)
 	int   value;
 	char  path[64] = {0};
 
-	/* get fan present status
-	 */
-	info->status |= ONLP_FAN_STATUS_PRESENT;
-
     /* get fan speed
      */
 	sprintf(path, "%s""fan_speed_rpm_%d", FAN_BOARD_PATH, fid);
@@ -92,6 +88,16 @@ _onlp_fani_info_get_fan(int fid, onlp_fan_info_t* info)
         return ONLP_STATUS_E_INTERNAL;
     }
 	info->rpm = value;
+
+	/* Derive presence + failure from RPM (no dedicated fault register on this
+	 * platform): rpm > 0 => PRESENT; rpm <= 0 => FAILED (absent or stalled).
+	 * This lets sysi_check_fan trigger the fault-safe full-speed path.
+	 */
+	if (value > 0) {
+		info->status |= ONLP_FAN_STATUS_PRESENT;
+	} else {
+		info->status |= ONLP_FAN_STATUS_FAILED;
+	}
 	
     /* get speed percentage
 	 */
@@ -119,24 +125,18 @@ onlp_fani_init(void)
 int
 onlp_fani_info_get(onlp_oid_t id, onlp_fan_info_t* info)
 {
-    int rc = 0;
+    int rc;
     int fid;
-    
+
     VALIDATE(id);
     fid = ONLP_OID_ID_GET(id);
+
+    if (fid < FAN_1_ON_FAN_BOARD || fid > FAN_3_ON_FAN_BOARD)
+        return ONLP_STATUS_E_INVALID;
+
     *info = finfo[fid];
-    switch (fid)
-    {	   
-        case FAN_1_ON_FAN_BOARD:
-        case FAN_2_ON_FAN_BOARD:
-        case FAN_3_ON_FAN_BOARD:
-            rc =_onlp_fani_info_get_fan(fid, info);						
-            break;
-        default:
-            rc = ONLP_STATUS_E_INVALID;
-            break;
-    }	
-    
+    rc = _onlp_fani_info_get_fan(fid, info);
+
     return rc;
 }
 
