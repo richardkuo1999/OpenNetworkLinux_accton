@@ -118,6 +118,8 @@ onlp_sfpi_is_present(int port)
     int present;
     int addr = (port < 38) ? 61 : 62;
 
+    VALIDATE_PORT(port);
+
 	if (onlp_file_read_int(&present, MODULE_PRESENT_FORMAT, 3, addr, (port+1)) < 0) {
         AIM_LOG_ERROR("Unable to read present status from port(%d)\r\n", port);
         return ONLP_STATUS_E_INTERNAL;
@@ -278,6 +280,9 @@ onlp_sfpi_eeprom_read(int port, uint8_t data[256])
      * Return OK if eeprom is read
      */
     int size = 0;
+
+    VALIDATE_PORT(port);
+
     memset(data, 0, 256);
 
 	if(onlp_file_read(data, 256, &size, PORT_EEPROM_FORMAT, PORT_BUS_INDEX(port)) != ONLP_STATUS_OK) {
@@ -298,7 +303,9 @@ onlp_sfpi_dom_read(int port, uint8_t data[256])
 {
     FILE* fp;
     char file[64] = {0};
-    
+
+    VALIDATE_PORT(port);
+
     sprintf(file, PORT_EEPROM_FORMAT, PORT_BUS_INDEX(port));
     fp = fopen(file, "r");
     if(fp == NULL) {
@@ -325,6 +332,7 @@ onlp_sfpi_dom_read(int port, uint8_t data[256])
 int
 onlp_sfpi_dev_readb(int port, uint8_t devaddr, uint8_t addr)
 {
+    VALIDATE_PORT(port);
     int bus = PORT_BUS_INDEX(port);
     return onlp_i2c_readb(bus, devaddr, addr, ONLP_I2C_F_FORCE);
 }
@@ -332,6 +340,7 @@ onlp_sfpi_dev_readb(int port, uint8_t devaddr, uint8_t addr)
 int
 onlp_sfpi_dev_writeb(int port, uint8_t devaddr, uint8_t addr, uint8_t value)
 {
+    VALIDATE_PORT(port);
     int bus = PORT_BUS_INDEX(port);
     return onlp_i2c_writeb(bus, devaddr, addr, value, ONLP_I2C_F_FORCE);
 }
@@ -339,6 +348,7 @@ onlp_sfpi_dev_writeb(int port, uint8_t devaddr, uint8_t addr, uint8_t value)
 int
 onlp_sfpi_dev_readw(int port, uint8_t devaddr, uint8_t addr)
 {
+    VALIDATE_PORT(port);
     int bus = PORT_BUS_INDEX(port);
     return onlp_i2c_readw(bus, devaddr, addr, ONLP_I2C_F_FORCE);
 }
@@ -346,6 +356,7 @@ onlp_sfpi_dev_readw(int port, uint8_t devaddr, uint8_t addr)
 int
 onlp_sfpi_dev_writew(int port, uint8_t devaddr, uint8_t addr, uint16_t value)
 {
+    VALIDATE_PORT(port);
     int bus = PORT_BUS_INDEX(port);
     return onlp_i2c_writew(bus, devaddr, addr, value, ONLP_I2C_F_FORCE);
 }

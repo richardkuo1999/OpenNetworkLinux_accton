@@ -57,14 +57,23 @@ onlp_sysi_platform_get(void)
 int
 onlp_sysi_onie_data_get(uint8_t** data, int* size)
 {
-    uint8_t* rdata = aim_zmalloc(256);
-    if (onlp_file_read(rdata, 256, size, IDPROM_PATH_1) == ONLP_STATUS_OK) {
-        if(*size == 256) {
-            *data = rdata;
-            return ONLP_STATUS_OK;
-        }
-    } else if (onlp_file_read(rdata, 256, size, IDPROM_PATH_2) == ONLP_STATUS_OK) {
-        if(*size == 256) {
+    static const char *const idprom_paths[] = { IDPROM_PATH_1, IDPROM_PATH_2 };
+    uint8_t *rdata = aim_zmalloc(256);
+    size_t i;
+
+    if (!rdata) {
+        *size = 0;
+        return ONLP_STATUS_E_INTERNAL;
+    }
+
+    /*
+     * Try each IDPROM path in order. Treat "read returned OK but size != 256"
+     * as a failure so the next path is tried; otherwise a short read on the
+     * first EEPROM silently short-circuits the fallback.
+     */
+    for (i = 0; i < AIM_ARRAYSIZE(idprom_paths); i++) {
+        if (onlp_file_read(rdata, 256, size, idprom_paths[i]) == ONLP_STATUS_OK &&
+            *size == 256) {
             *data = rdata;
             return ONLP_STATUS_OK;
         }

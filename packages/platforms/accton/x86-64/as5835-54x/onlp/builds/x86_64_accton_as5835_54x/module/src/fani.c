@@ -142,7 +142,7 @@ _onlp_fani_info_get_fan(int fid, onlp_fan_info_t* info)
     /* get speed percentage from rpm 
 	 */
 	ret = onlp_file_read_int(&value, "%s""fan_max_speed_rpm", FAN_BOARD_PATH);
-    if (ret < 0) {
+    if (ret < 0 || value <= 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
 	
@@ -152,30 +152,19 @@ _onlp_fani_info_get_fan(int fid, onlp_fan_info_t* info)
 }
 
 static uint32_t
-_onlp_get_fan_direction_on_psu(void)
+_onlp_get_fan_direction_on_psu(int pid)
 {
-    /* Try to read direction from PSU1.
-     * If PSU1 is not valid, read from PSU2
-     */
-    int i = 0;
+    psu_type_t psu_type = get_psu_type(pid, NULL, 0);
 
-    for (i = PSU1_ID; i <= PSU2_ID; i++) {
-        psu_type_t psu_type;
-        psu_type = get_psu_type(i, NULL, 0);
-
-        if (psu_type == PSU_TYPE_UNKNOWN) {
-            continue;
-        }
-
-        if (PSU_TYPE_AC_F2B == psu_type || PSU_TYPE_DC_F2B == psu_type) {
-            return ONLP_FAN_STATUS_F2B;
-        }
-        else {
-            return ONLP_FAN_STATUS_B2F;
-        }
+    if (psu_type == PSU_TYPE_UNKNOWN) {
+        return 0;
     }
 
-    return 0;
+    if (PSU_TYPE_AC_F2B == psu_type || PSU_TYPE_DC_F2B == psu_type) {
+        return ONLP_FAN_STATUS_F2B;
+    }
+
+    return ONLP_FAN_STATUS_B2F;
 }
 
 static int
@@ -183,11 +172,15 @@ _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
 	int val = 0;
 
+	if (get_psu_type(pid, NULL, 0) == PSU_TYPE_UNKNOWN) {
+		return ONLP_STATUS_OK;
+	}
+
 	info->status |= ONLP_FAN_STATUS_PRESENT;
 
     /* get fan direction
      */
-    info->status |= _onlp_get_fan_direction_on_psu();
+    info->status |= _onlp_get_fan_direction_on_psu(pid);
 
     /* get fan fault status
      */

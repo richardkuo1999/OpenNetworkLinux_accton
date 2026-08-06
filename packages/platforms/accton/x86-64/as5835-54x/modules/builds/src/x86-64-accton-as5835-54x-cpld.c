@@ -807,7 +807,7 @@ static ssize_t show_status(struct device *dev, struct device_attribute *da,
 		invert = 1;
 		break;
 	default:
-		return 0;
+		return -EINVAL;
 	}
 
     if (attr->index >= MODULE_PRESENT_1 && attr->index <= MODULE_PRESENT_54) {
@@ -881,7 +881,7 @@ static ssize_t set_control(struct device *dev, struct device_attribute *da,
 		mask = 0x1 << (attr->index - MODULE_RESET_49);
 		break;
 	default:
-		return 0;
+		return -EINVAL;
 	}
 
     /* Read current status */

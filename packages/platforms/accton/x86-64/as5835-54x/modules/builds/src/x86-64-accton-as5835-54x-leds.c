@@ -303,7 +303,7 @@ static int accton_as5835_54x_led_probe(struct platform_device *pdev)
 		
 		/* only unregister the LEDs that were successfully registered */
 		for (j = 0; j < i; j++) {
-			led_classdev_unregister(&accton_as5835_54x_leds[i]);
+			led_classdev_unregister(&accton_as5835_54x_leds[j]);
 		}
 	}
 
@@ -356,7 +356,10 @@ static int __init accton_as5835_54x_led_init(void)
 	return 0;
 
 exit_free:
+	platform_driver_unregister(&accton_as5835_54x_led_driver);
 	kfree(ledctl);
+	ledctl = NULL;
+	return ret;
 exit_driver:
 	platform_driver_unregister(&accton_as5835_54x_led_driver);
 exit:

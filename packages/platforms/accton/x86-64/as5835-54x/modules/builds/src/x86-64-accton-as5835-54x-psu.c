@@ -105,7 +105,7 @@ static ssize_t show_status(struct device *dev, struct device_attribute *da,
     data = as5835_54x_psu_update_device(dev);
 	if (!data->valid) {
         mutex_unlock(&data->update_lock);
-		return sprintf(buf, "0\n");
+		return -EIO;
 	}
 
 	if (attr->index == PSU_PRESENT) {
