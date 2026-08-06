@@ -287,8 +287,13 @@ static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
 		mutex_unlock(&data->update_lock);
 		return error;
 	}
-    as5912_54xk_fan_write_value(client, fan_reg[FAN_DUTY_CYCLE_PERCENTAGE], duty_cycle_to_reg_val(value));
-	data->valid = 0;
+    error = as5912_54xk_fan_write_value(client, fan_reg[FAN_DUTY_CYCLE_PERCENTAGE], duty_cycle_to_reg_val(value));
+    if (error != 0) {
+        dev_dbg(&client->dev, "Unable to write fan duty cycle\n");
+        mutex_unlock(&data->update_lock);
+        return error;
+    }
+    data->valid = 0;
 
     mutex_unlock(&data->update_lock);
     return count;
@@ -390,7 +395,6 @@ static struct as5912_54xk_fan_data *as5912_54xk_fan_update_device(struct device 
             
             if (status < 0) {
                 data->valid = 0;
-                mutex_unlock(&data->update_lock);
                 dev_dbg(&client->dev, "reg %d, err %d\n", fan_reg[i], status);
                 return data;
             }
@@ -459,9 +463,11 @@ exit:
 static int as5912_54xk_fan_remove(struct i2c_client *client)
 {
     struct as5912_54xk_fan_data *data = i2c_get_clientdata(client);
+
     hwmon_device_unregister(data->hwmon_dev);
     sysfs_remove_group(&client->dev.kobj, &as5912_54xk_fan_group);
-    
+    mutex_destroy(&data->update_lock);
+    kfree(data);
     return 0;
 }
 

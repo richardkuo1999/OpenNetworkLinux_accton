@@ -131,34 +131,42 @@ static onlp_led_info_t linfo[] =
     },
 };
 
+/*
+ * Look up onlp_led_mode for a given driver value.
+ * Returns a negative ONLP_STATUS_* on "not found" so callers can distinguish
+ * a genuine LED_MODE_OFF from an unrecognised driver reading. Using 0 as
+ * sentinel is unsafe because 0 aliases both ONLP_LED_MODE_OFF and
+ * LED_MODE_OFF.
+ */
 static int driver_to_onlp_led_mode(enum onlp_led_id id, enum led_light_mode driver_led_mode)
 {
     int i, nsize = sizeof(led_map)/sizeof(led_map[0]);
-    
-    for (i = 0; i < nsize; i++)
-    {
-        if (id == led_map[i].id && driver_led_mode == led_map[i].driver_led_mode)
-        {
+
+    for (i = 0; i < nsize; i++) {
+        if (id == led_map[i].id && driver_led_mode == led_map[i].driver_led_mode) {
             return led_map[i].onlp_led_mode;
         }
     }
-    
-    return 0;
+
+    return ONLP_STATUS_E_INVALID;
 }
 
+/*
+ * Look up driver mode for a given onlp_led_mode.
+ * Returns ONLP_STATUS_E_UNSUPPORTED on "not found" so callers refuse to
+ * write a fabricated (== OFF) value to the LED.
+ */
 static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led_mode)
 {
     int i, nsize = sizeof(led_map)/sizeof(led_map[0]);
-    
-    for(i = 0; i < nsize; i++)
-    {
-        if (id == led_map[i].id && onlp_led_mode == led_map[i].onlp_led_mode)
-        {
+
+    for (i = 0; i < nsize; i++) {
+        if (id == led_map[i].id && onlp_led_mode == led_map[i].onlp_led_mode) {
             return led_map[i].driver_led_mode;
         }
     }
-    
-    return 0;
+
+    return ONLP_STATUS_E_UNSUPPORTED;
 }
 
 /*
@@ -179,10 +187,10 @@ onlp_ledi_init(void)
 int
 onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
 {
-    int  lid, value;
-		
+    int  lid, value, mapped;
+
     VALIDATE(id);
-	
+
     lid = ONLP_OID_ID_GET(id);
 
     /* Set the onlp_oid_hdr_t and capabilities */
@@ -194,7 +202,19 @@ onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
         return ONLP_STATUS_E_INTERNAL;
     }
 
-    info->mode = driver_to_onlp_led_mode(lid, value);
+    mapped = driver_to_onlp_led_mode(lid, value);
+    if (mapped < 0) {
+        /* Driver reported a value we don't know how to translate.
+         * Report ONLP_LED_MODE_OFF but keep STATUS_ON derived from the
+         * raw driver value so onlpdump still reflects reality. */
+        info->mode = ONLP_LED_MODE_OFF;
+        if (value != LED_MODE_OFF) {
+            info->status |= ONLP_LED_STATUS_ON;
+        }
+        return ONLP_STATUS_OK;
+    }
+
+    info->mode = mapped;
 
     /* Set the on/off status */
     if (info->mode != ONLP_LED_MODE_OFF) {
@@ -234,11 +254,21 @@ onlp_ledi_set(onlp_oid_t id, int on_or_off)
 int
 onlp_ledi_mode_set(onlp_oid_t id, onlp_led_mode_t mode)
 {
-    int  lid;	
+    int  lid, drv_mode;
+
     VALIDATE(id);
 
     lid = ONLP_OID_ID_GET(id);
-    if (onlp_file_write_int(onlp_to_driver_led_mode(lid , mode), LED_FORMAT, leds[lid]) < 0) {
+
+    drv_mode = onlp_to_driver_led_mode(lid, mode);
+    if (drv_mode < 0) {
+        /* Requested ONLP mode is not supported by this LED. Do NOT touch
+         * HW because writing a fabricated value would silently turn the
+         * LED off while returning success. */
+        return drv_mode;
+    }
+
+    if (onlp_file_write_int(drv_mode, LED_FORMAT, leds[lid]) < 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
 

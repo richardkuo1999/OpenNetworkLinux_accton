@@ -190,9 +190,15 @@ _onlp_get_fan_direction_on_psu(void)
 static int
 _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
-	int val = 0;
+    int val = 0;
+    psu_type_t psu_type = get_psu_type(pid, NULL, 0);
 
-	info->status |= ONLP_FAN_STATUS_PRESENT;
+    if (psu_type == PSU_TYPE_UNKNOWN) {
+        /* PSU is absent or unrecognized; report fan as not present */
+        return ONLP_STATUS_OK;
+    }
+
+    info->status |= ONLP_FAN_STATUS_PRESENT;
 
     /* get fan direction
      */
@@ -200,11 +206,13 @@ _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 
     /* get fan speed
      */
-    if (psu_ym2651y_pmbus_info_get(pid, "psu_fan1_speed_rpm", &val) == ONLP_STATUS_OK) {
-        info->rpm = val;
-	    info->percentage = (info->rpm * 100) / MAX_PSU_FAN_SPEED;	
-		info->status |= (val == 0) ? ONLP_FAN_STATUS_FAILED : 0;
+    if (psu_ym2651y_pmbus_info_get(pid, "psu_fan1_speed_rpm", &val) != ONLP_STATUS_OK) {
+        info->status |= ONLP_FAN_STATUS_FAILED;
+        return ONLP_STATUS_OK;
     }
+    info->rpm = val;
+    info->percentage = (info->rpm * 100) / MAX_PSU_FAN_SPEED;
+    info->status |= (val == 0) ? ONLP_FAN_STATUS_FAILED : 0;
 
     return ONLP_STATUS_OK;
 }

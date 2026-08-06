@@ -208,7 +208,7 @@ sysi_fanctrl_single_thermal_sensor_policy(onlp_fan_info_t fi[CHASSIS_FAN_COUNT],
 
     /* When anyone higher than 50 degrees, all fans run with duty 100%.
      */
-    for (i = (THERMAL_1_ON_MAIN_BROAD); i <= (THERMAL_3_ON_MAIN_BROAD); i++) {
+    for (i = (THERMAL_1_ON_MAIN_BROAD); i <= (THERMAL_4_ON_MAIN_BROAD); i++) {
         if (ti[i-1].mcelsius < 50000) {
             continue;
         }
@@ -219,7 +219,7 @@ sysi_fanctrl_single_thermal_sensor_policy(onlp_fan_info_t fi[CHASSIS_FAN_COUNT],
 
     /* When anyone higher than 45 degrees, all fans run with duty 62.5%.
      */
-    for (i = (THERMAL_1_ON_MAIN_BROAD); i <= (THERMAL_3_ON_MAIN_BROAD); i++) {
+    for (i = (THERMAL_1_ON_MAIN_BROAD); i <= (THERMAL_4_ON_MAIN_BROAD); i++) {
         if (ti[i-1].mcelsius < 45000) {
             continue;
         }
@@ -247,7 +247,7 @@ sysi_fanctrl_overall_thermal_sensor_policy(onlp_fan_info_t fi[CHASSIS_FAN_COUNT]
     fanduty_min += (fi[0].status & FANCTRL_DIR_FACTOR) ? FANCTRL_DIR_FACTOR_DUTY_ADDON : 0;
     fanduty_mid += (fi[0].status & FANCTRL_DIR_FACTOR) ? FANCTRL_DIR_FACTOR_DUTY_ADDON : 0;
 
-    for (i = (THERMAL_1_ON_MAIN_BROAD); i <= (THERMAL_3_ON_MAIN_BROAD); i++) {
+    for (i = (THERMAL_1_ON_MAIN_BROAD); i <= (THERMAL_4_ON_MAIN_BROAD); i++) {
         num_of_sensor++;
         temp_avg += ti[i-1].mcelsius;
     }
