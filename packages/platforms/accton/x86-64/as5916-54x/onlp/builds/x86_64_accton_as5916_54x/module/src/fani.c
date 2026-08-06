@@ -192,6 +192,13 @@ _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
 	int val = 0;
 
+	/* If the PSU is absent, the PSU fan does not physically exist.
+	 * Leave the fan status cleared so callers do not see a phantom fan
+	 * that would otherwise be interpreted as a stopped/failed fan. */
+	if (get_psu_type(pid, NULL, 0) == PSU_TYPE_UNKNOWN) {
+	    return ONLP_STATUS_OK;
+	}
+
 	info->status |= ONLP_FAN_STATUS_PRESENT;
 
     /* get fan direction
