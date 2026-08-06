@@ -133,7 +133,7 @@ static int driver_to_onlp_led_mode(enum onlp_led_id id, enum led_light_mode driv
         }
     }
     
-    return 0;
+    return -1;
 }
 
 static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led_mode)
@@ -148,7 +148,7 @@ static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led
         }
     }
     
-    return 0;
+    return -1;
 }
 
 /*
@@ -169,20 +169,28 @@ onlp_ledi_init(void)
 int
 onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
 {
-    int  lid, value;	
+    int  lid, value;
+    int  mode;
     VALIDATE(id);
 	
     lid = ONLP_OID_ID_GET(id);
+    if (lid < LED_LOC || lid > LED_FAN) {
+        return ONLP_STATUS_E_INVALID;
+    }
 
 	/* Set the onlp_oid_hdr_t and capabilities */
-    *info = linfo[ONLP_OID_ID_GET(id)];
+    *info = linfo[lid];
 
     /* Get LED mode */
     if (onlp_file_read_int(&value, LED_FORMAT, leds[lid]) < 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
 
-    info->mode = driver_to_onlp_led_mode(lid, value);
+    mode = driver_to_onlp_led_mode(lid, value);
+    if (mode < 0) {
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+    info->mode = mode;
 
     /* Set the on/off status */
     if (info->mode != ONLP_LED_MODE_OFF) {
@@ -223,14 +231,24 @@ int
 onlp_ledi_mode_set(onlp_oid_t id, onlp_led_mode_t mode)
 {
     int  lid;
+    int  drv_mode;
     char path[64] = {0};		
 
     VALIDATE(id);
 	
     lid = ONLP_OID_ID_GET(id);
+    if (lid < LED_LOC || lid > LED_FAN) {
+        return ONLP_STATUS_E_INVALID;
+    }
+
+    drv_mode = onlp_to_driver_led_mode(lid, mode);
+    if (drv_mode < 0) {
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+
     sprintf(path, LED_FORMAT, leds[lid]);
 
-    if (onlp_file_write_integer(path, onlp_to_driver_led_mode(lid , mode)) < 0) {
+    if (onlp_file_write_integer(path, drv_mode) < 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
 

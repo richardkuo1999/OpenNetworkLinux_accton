@@ -182,6 +182,28 @@ static int
 _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
 	int val = 0;
+	int ret;
+
+	/* If the parent PSU is not present, its embedded fan does not exist.
+	 * Mirror the presence-check pattern used by onlp_psui_info_get().
+	 */
+	if (pid == PSU1_ID) {
+		ret = onlp_file_read_int(&val, "%s%s", PSU1_AC_HWMON_PREFIX, "psu_present");
+	}
+	else if (pid == PSU2_ID) {
+		ret = onlp_file_read_int(&val, "%s%s", PSU2_AC_HWMON_PREFIX, "psu_present");
+	}
+	else {
+		return ONLP_STATUS_E_INVALID;
+	}
+	if (ret < 0) {
+		AIM_LOG_ERROR("Unable to read PSU(%d) node(psu_present)\r\n", pid);
+		return ONLP_STATUS_E_INTERNAL;
+	}
+	if (val != 1) {
+		info->status = 0;
+		return ONLP_STATUS_OK;
+	}
 
 	info->status |= ONLP_FAN_STATUS_PRESENT;
 
@@ -222,6 +244,10 @@ onlp_fani_info_get(onlp_oid_t id, onlp_fan_info_t* info)
     VALIDATE(id);
 
     fid = ONLP_OID_ID_GET(id);
+    if (fid < FAN_1_ON_FAN_BOARD || fid > FAN_1_ON_PSU_2) {
+        return ONLP_STATUS_E_INVALID;
+    }
+
     *info = finfo[fid];
 
     switch (fid)

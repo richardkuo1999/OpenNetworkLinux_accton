@@ -285,9 +285,14 @@ static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
 		return error;
 	}
 
-    as5822_54x_fan_write_value(fan_reg[FAN_DUTY_CYCLE_PERCENTAGE], duty_cycle_to_reg_val(value));
+    error = as5822_54x_fan_write_value(fan_reg[FAN_DUTY_CYCLE_PERCENTAGE], duty_cycle_to_reg_val(value));
+    if (error < 0) {
+        dev_dbg(fan_data->hwmon_dev, "Unable to set fan duty cycle (%d)\n", error);
+        mutex_unlock(&fan_data->update_lock);
+        return error;
+    }
     fan_data->valid = 0;
-    
+
     mutex_unlock(&fan_data->update_lock);
     return count;
 }
@@ -349,6 +354,7 @@ static ssize_t fan_show_value(struct device *dev, struct device_attribute *da,
 				break;
 			case FAN_MAX_RPM:
 				ret = sprintf(buf, "%d\n", MAX_FAN_SPEED_RPM);
+				break;
             default:
                 break;
         }        

@@ -267,23 +267,20 @@ abort:
 static int as5822_54x_psu_read_bytes(struct i2c_client *client, u8 command, u8 *data,
 			  int data_len)
 {
-    int ret = 0;
-
 	while (data_len) {
-		ssize_t status;
-
-		status = as5822_54x_psu_read_byte(client, command, data);
-		if (status <= 0) {
-            ret = status;
-			break;
+		int status = as5822_54x_psu_read_byte(client, command, data);
+		if (status < 0) {
+			/* Only negative errno is a failure; a legal 0x00 byte
+			 * must not terminate the read loop. */
+			return status;
 		}
 
 		data += 1;
 		command  += 1;
 		data_len -= 1;
 	}
-    
-    return ret;
+
+	return 0;
 }
 
 static int as5822_54x_psu_read_block(struct i2c_client *client, u8 command, u8 *data,

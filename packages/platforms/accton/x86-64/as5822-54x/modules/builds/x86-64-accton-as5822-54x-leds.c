@@ -299,7 +299,7 @@ static int accton_as5822_54x_led_probe(struct platform_device *pdev)
 		
 		/* only unregister the LEDs that were successfully registered */
 		for (j = 0; j < i; j++) {
-			led_classdev_unregister(&accton_as5822_54x_leds[i]);
+			led_classdev_unregister(&accton_as5822_54x_leds[j]);
 		}
 	}
 

@@ -766,7 +766,7 @@ static ssize_t show_status(struct device *dev, struct device_attribute *da,
 		mask = 0x1 << (attr->index - MODULE_RXLOS_46);
 		break;
 	default:
-		return 0;
+		return -EINVAL;
 	}
 
     if (attr->index >= MODULE_PRESENT_1 && attr->index <= MODULE_PRESENT_54) {
@@ -832,7 +832,7 @@ static ssize_t set_tx_disable(struct device *dev, struct device_attribute *da,
 		mask = 0x1 << (attr->index - MODULE_TXDISABLE_46);
 		break;
 	default:
-		return 0;
+		return -EINVAL;
 	}
 
     /* Read current status */
@@ -943,6 +943,7 @@ static ssize_t show_version(struct device *dev, struct device_attribute *attr, c
 
     if (val < 0) {
         dev_dbg(&client->dev, "cpld(0x%x) reg(0x1) err %d\n", client->addr, val);
+        return val;
     }
 	
     return sprintf(buf, "%d", val);

@@ -112,7 +112,9 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
         }
     }
 
-    pi->cpld_versions = aim_fstrdup("%d.%d", v[0], v[1]);
+    /* Format must include one field per CPLD; keep in sync with NUM_OF_CPLD
+     * (cpld_path[] order is CPLD1, CPLD2, CPLD3). */
+    pi->cpld_versions = aim_fstrdup("%d.%d.%d", v[0], v[1], v[2]);
     return ONLP_STATUS_OK;
 }
 

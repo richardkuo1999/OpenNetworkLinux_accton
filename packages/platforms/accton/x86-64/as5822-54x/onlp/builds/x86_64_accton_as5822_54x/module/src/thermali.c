@@ -114,6 +114,9 @@ onlp_thermali_info_get(onlp_oid_t id, onlp_thermal_info_t* info)
     VALIDATE(id);
 	
     tid = ONLP_OID_ID_GET(id);
+    if (tid < THERMAL_CPU_CORE || tid > THERMAL_1_ON_PSU2) {
+        return ONLP_STATUS_E_INVALID;
+    }
 	
     /* Set the onlp_oid_hdr_t and capabilities */		
     *info = linfo[tid];
