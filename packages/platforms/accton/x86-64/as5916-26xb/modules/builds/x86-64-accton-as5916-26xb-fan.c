@@ -358,7 +358,8 @@ static ssize_t set_fan(struct device *dev, struct device_attribute *da,
 		return status;
 	}
 
-    pwm = (pwm * 100) / 625 - 1; /* Convert pwm to register value */
+    pwm = (pwm > 100) ? 15 : (pwm * 100) / 625 - 1;
+    if (pwm < 0) pwm = 0;
 
     mutex_lock(&data->update_lock);
 

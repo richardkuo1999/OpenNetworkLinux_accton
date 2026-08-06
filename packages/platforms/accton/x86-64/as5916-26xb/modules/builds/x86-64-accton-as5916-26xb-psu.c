@@ -396,32 +396,32 @@ static ssize_t show_psu(struct device *dev, struct device_attribute *da, char *b
 		case PSU1_VIN:
 		case PSU2_VIN:
             VALIDATE_PRESENT_RETURN(pid);
-			value = ((int)data->ipmi_resp[pid].status[PSU_VIN0] |
-                     (int)data->ipmi_resp[pid].status[PSU_VIN1] << 8) * 1000;
+			value = ((u32)data->ipmi_resp[pid].status[PSU_VIN0] |
+                     (u32)data->ipmi_resp[pid].status[PSU_VIN1] << 8) * 1000;
 			break;
 		case PSU1_VOUT:
 		case PSU2_VOUT:
             VALIDATE_PRESENT_RETURN(pid);
-			value = ((int)data->ipmi_resp[pid].status[PSU_VOUT0] |
-                     (int)data->ipmi_resp[pid].status[PSU_VOUT1] << 8) * 1000;
+			value = ((u32)data->ipmi_resp[pid].status[PSU_VOUT0] |
+                     (u32)data->ipmi_resp[pid].status[PSU_VOUT1] << 8) * 1000;
 			break;
 		case PSU1_IOUT:
 		case PSU2_IOUT:
             VALIDATE_PRESENT_RETURN(pid);
-			value = ((int)data->ipmi_resp[pid].status[PSU_IOUT0] |
-                     (int)data->ipmi_resp[pid].status[PSU_IOUT1] << 8) * 1000;
+			value = ((u32)data->ipmi_resp[pid].status[PSU_IOUT0] |
+                     (u32)data->ipmi_resp[pid].status[PSU_IOUT1] << 8) * 1000;
 			break;
 		case PSU1_POUT:
 		case PSU2_POUT:
             VALIDATE_PRESENT_RETURN(pid);
-			value = ((int)data->ipmi_resp[pid].status[PSU_POUT0] |
-                     (int)data->ipmi_resp[pid].status[PSU_POUT1] << 8) * 1000;
+			value = ((u32)data->ipmi_resp[pid].status[PSU_POUT0] |
+                     (u32)data->ipmi_resp[pid].status[PSU_POUT1] << 8) * 1000;
 			break;
 		case PSU1_TEMP_INPUT:
 		case PSU2_TEMP_INPUT:
             VALIDATE_PRESENT_RETURN(pid);
-			value = ((int)data->ipmi_resp[pid].status[PSU_TEMP0] |
-                     (int)data->ipmi_resp[pid].status[PSU_TEMP1] << 8) * 1000;
+			value = ((u32)data->ipmi_resp[pid].status[PSU_TEMP0] |
+                     (u32)data->ipmi_resp[pid].status[PSU_TEMP1] << 8) * 1000;
 			break;
 		case PSU1_FAN_INPUT:
 		case PSU2_FAN_INPUT:

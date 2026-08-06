@@ -128,6 +128,22 @@ _onlp_fani_info_get_fan_on_psu(int pid, onlp_fan_info_t* info)
 {
 	int   value, ret;
 
+    /* Check PSU presence first; a PSU fan only exists when the PSU is
+     * installed. Without this check, an empty PSU slot would be reported as
+     * PRESENT|FAILED with rpm=0, generating a persistent false fan-failure
+     * alarm to onlpdump / SNMP / SONiC pmon. Mirror the psu%d_present check
+     * that onlp_psui_info_get() already performs in psui.c. */
+    ret = onlp_file_read_int(&value, "%s""psu%d_present", PSU_SYSFS_PATH, pid);
+    if (ret < 0) {
+        AIM_LOG_ERROR("Unable to read status from (%s""psu%d_present)\r\n", PSU_SYSFS_PATH, pid);
+        return ONLP_STATUS_E_INTERNAL;
+    }
+
+    if (value != 1) {
+        /* PSU not installed -> associated fan is not present either. */
+        return ONLP_STATUS_OK;
+    }
+
 	info->status |= ONLP_FAN_STATUS_PRESENT;
 
     /* get fan direction
