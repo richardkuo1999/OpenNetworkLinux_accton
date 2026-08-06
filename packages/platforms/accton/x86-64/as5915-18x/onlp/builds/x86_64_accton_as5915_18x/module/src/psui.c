@@ -167,10 +167,10 @@ onlp_psui_info_get(onlp_oid_t id, onlp_psu_info_t* info)
     /* Set capability
      */
     get_psu_model(index, info->model, AIM_ARRAYSIZE(info->model));
-    if(info->caps == ONLP_PSU_CAPS_AC) {
+    info->caps |= get_DCorAC_cap(info->model);
+    if (info->caps & ONLP_PSU_CAPS_AC) {
         get_psu_serial(index, info->serial, AIM_ARRAYSIZE(info->serial));
     }
-    info->caps |= get_DCorAC_cap(info->model);;
 
     if (info->status & ONLP_PSU_STATUS_FAILED) {
         return ONLP_STATUS_OK;

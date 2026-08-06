@@ -378,7 +378,6 @@ static struct as5915_18x_fan_data *as5915_18x_fan_update_device(struct device *d
 
             if (status < 0) {
                 data->valid = 0;
-                mutex_unlock(&data->update_lock);
                 dev_dbg(&client->dev, "reg %d, err %d\n", fan_reg[i], status);
                 return data;
             }
