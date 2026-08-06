@@ -153,6 +153,9 @@ onlp_sfpi_eeprom_read(int port, uint8_t data[256])
      * Return OK if eeprom is read
      */
     int size = 0;
+
+    VALIDATE_QSFP(port);
+
     memset(data, 0, 256);
 
 	if(onlp_file_read(data, 256, &size, PORT_EEPROM_FORMAT, PORT_BUS_INDEX(port)) != ONLP_STATUS_OK) {
@@ -173,7 +176,9 @@ onlp_sfpi_dom_read(int port, uint8_t data[256])
 {
     FILE* fp;
     char file[64] = {0};
-    
+
+    VALIDATE_QSFP(port);
+
     sprintf(file, PORT_EEPROM_FORMAT, PORT_BUS_INDEX(port));
     fp = fopen(file, "r");
     if(fp == NULL) {
@@ -200,28 +205,36 @@ onlp_sfpi_dom_read(int port, uint8_t data[256])
 int
 onlp_sfpi_dev_readb(int port, uint8_t devaddr, uint8_t addr)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_QSFP(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_readb(bus, devaddr, addr, ONLP_I2C_F_FORCE);
 }
 
 int
 onlp_sfpi_dev_writeb(int port, uint8_t devaddr, uint8_t addr, uint8_t value)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_QSFP(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_writeb(bus, devaddr, addr, value, ONLP_I2C_F_FORCE);
 }
 
 int
 onlp_sfpi_dev_readw(int port, uint8_t devaddr, uint8_t addr)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_QSFP(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_readw(bus, devaddr, addr, ONLP_I2C_F_FORCE);
 }
 
 int
 onlp_sfpi_dev_writew(int port, uint8_t devaddr, uint8_t addr, uint16_t value)
 {
-    int bus = PORT_BUS_INDEX(port);
+    int bus;
+    VALIDATE_QSFP(port);
+    bus = PORT_BUS_INDEX(port);
     return onlp_i2c_writew(bus, devaddr, addr, value, ONLP_I2C_F_FORCE);
 }
 
@@ -253,7 +266,7 @@ onlp_sfpi_control_set(int port, onlp_sfp_control_t control, int value)
             }
             else
             {
-                rv = ONLP_STATUS_E_INTERNAL;
+                rv = ONLP_STATUS_E_MISSING;
             }
             break;
         }
@@ -319,7 +332,7 @@ onlp_sfpi_control_get(int port, onlp_sfp_control_t control, int* value)
                     }
                 }
                 else{
-                    rv = ONLP_STATUS_E_INTERNAL;
+                    rv = ONLP_STATUS_E_MISSING;
                 }
                 break;
             }

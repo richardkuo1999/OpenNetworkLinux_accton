@@ -214,6 +214,9 @@ onlp_thermali_info_get(onlp_oid_t id, onlp_thermal_info_t* info)
     int coretemp_max = 0, coretemp_temp = 0;
 
     tid = ONLP_OID_ID_GET(id);
+    if (tid <= 0 || tid >= (int)AIM_ARRAYSIZE(linfo)) {
+        return ONLP_STATUS_E_INVALID;
+    }
 
     /* Set the onlp_oid_hdr_t and capabilities */		
     *info = linfo[tid];
@@ -232,6 +235,10 @@ onlp_thermali_info_get(onlp_oid_t id, onlp_thermal_info_t* info)
 
         return ONLP_STATUS_OK;
 
+    }
+
+    if (devfiles__[tid] == NULL) {
+        return ONLP_STATUS_E_INTERNAL;
     }
 
     return onlp_file_read_int(&info->mcelsius, devfiles__[tid]);							

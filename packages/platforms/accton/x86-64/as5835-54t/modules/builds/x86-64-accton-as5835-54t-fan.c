@@ -277,9 +277,13 @@ static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
     }
 
     mutex_lock(&data->update_lock);
-	
-    as5835_54t_fan_write_value(client, fan_reg[FAN_DUTY_CYCLE_PERCENTAGE], duty_cycle_to_reg_val(value));
-	data->valid = 0;
+
+    error = as5835_54t_fan_write_value(client, fan_reg[FAN_DUTY_CYCLE_PERCENTAGE], duty_cycle_to_reg_val(value));
+    if (error < 0) {
+        mutex_unlock(&data->update_lock);
+        return error;
+    }
+    data->valid = 0;
 
     mutex_unlock(&data->update_lock);
     return count;
@@ -296,57 +300,60 @@ static ssize_t fan_show_value(struct device *dev, struct device_attribute *da,
     mutex_lock(&data->update_lock);
 
     data = as5835_54t_fan_update_device(dev);
-    if (data->valid) {
-        switch (attr->index) {
-            case FAN_DUTY_CYCLE_PERCENTAGE:
-            {
-                u32 duty_cycle = reg_val_to_duty_cycle(data->reg_val[FAN_DUTY_CYCLE_PERCENTAGE]);
-                ret = sprintf(buf, "%u\n", duty_cycle);
-                break;
-            }
-            case FAN1_FRONT_SPEED_RPM:
-            case FAN2_FRONT_SPEED_RPM:
-            case FAN3_FRONT_SPEED_RPM:
-            case FAN4_FRONT_SPEED_RPM:
-            case FAN5_FRONT_SPEED_RPM:
-            case FAN1_REAR_SPEED_RPM:
-            case FAN2_REAR_SPEED_RPM:
-            case FAN3_REAR_SPEED_RPM:
-            case FAN4_REAR_SPEED_RPM:
-            case FAN5_REAR_SPEED_RPM:
-                ret = sprintf(buf, "%u\n", reg_val_to_speed_rpm(data->reg_val[attr->index]));
-                break;
-            case FAN1_PRESENT:
-            case FAN2_PRESENT:
-            case FAN3_PRESENT:
-            case FAN4_PRESENT:
-            case FAN5_PRESENT:
-                ret = sprintf(buf, "%d\n",
-                              reg_val_to_is_present(data->reg_val[FAN_PRESENT_REG],
-                              attr->index - FAN1_PRESENT));
-                break;
-            case FAN1_FAULT:
-            case FAN2_FAULT:
-            case FAN3_FAULT:
-            case FAN4_FAULT:
-            case FAN5_FAULT:
-                ret = sprintf(buf, "%d\n", is_fan_fault(data, attr->index - FAN1_FAULT));
-                break;
-			case FAN1_DIRECTION:
-			case FAN2_DIRECTION:
-			case FAN3_DIRECTION:
-			case FAN4_DIRECTION:
-			case FAN5_DIRECTION:
-				ret = sprintf(buf, "%d\n",
-							  reg_val_to_direction(data->reg_val[FAN_DIRECTION_REG],
-							  attr->index - FAN1_DIRECTION));
-				break;
-			case FAN_MAX_RPM:
-				ret = sprintf(buf, "%d\n", MAX_FAN_SPEED_RPM);
-                break;
-            default:
-                break;
-        }        
+    if (!data->valid) {
+        mutex_unlock(&data->update_lock);
+        return -EIO;
+    }
+
+    switch (attr->index) {
+        case FAN_DUTY_CYCLE_PERCENTAGE:
+        {
+            u32 duty_cycle = reg_val_to_duty_cycle(data->reg_val[FAN_DUTY_CYCLE_PERCENTAGE]);
+            ret = sprintf(buf, "%u\n", duty_cycle);
+            break;
+        }
+        case FAN1_FRONT_SPEED_RPM:
+        case FAN2_FRONT_SPEED_RPM:
+        case FAN3_FRONT_SPEED_RPM:
+        case FAN4_FRONT_SPEED_RPM:
+        case FAN5_FRONT_SPEED_RPM:
+        case FAN1_REAR_SPEED_RPM:
+        case FAN2_REAR_SPEED_RPM:
+        case FAN3_REAR_SPEED_RPM:
+        case FAN4_REAR_SPEED_RPM:
+        case FAN5_REAR_SPEED_RPM:
+            ret = sprintf(buf, "%u\n", reg_val_to_speed_rpm(data->reg_val[attr->index]));
+            break;
+        case FAN1_PRESENT:
+        case FAN2_PRESENT:
+        case FAN3_PRESENT:
+        case FAN4_PRESENT:
+        case FAN5_PRESENT:
+            ret = sprintf(buf, "%d\n",
+                          reg_val_to_is_present(data->reg_val[FAN_PRESENT_REG],
+                          attr->index - FAN1_PRESENT));
+            break;
+        case FAN1_FAULT:
+        case FAN2_FAULT:
+        case FAN3_FAULT:
+        case FAN4_FAULT:
+        case FAN5_FAULT:
+            ret = sprintf(buf, "%d\n", is_fan_fault(data, attr->index - FAN1_FAULT));
+            break;
+        case FAN1_DIRECTION:
+        case FAN2_DIRECTION:
+        case FAN3_DIRECTION:
+        case FAN4_DIRECTION:
+        case FAN5_DIRECTION:
+            ret = sprintf(buf, "%d\n",
+                          reg_val_to_direction(data->reg_val[FAN_DIRECTION_REG],
+                          attr->index - FAN1_DIRECTION));
+            break;
+        case FAN_MAX_RPM:
+            ret = sprintf(buf, "%d\n", MAX_FAN_SPEED_RPM);
+            break;
+        default:
+            break;
     }
 
     mutex_unlock(&data->update_lock);
@@ -377,7 +384,6 @@ static struct as5835_54t_fan_data *as5835_54t_fan_update_device(struct device *d
             
             if (status < 0) {
                 data->valid = 0;
-                mutex_unlock(&data->update_lock);
                 dev_dbg(&client->dev, "reg %d, err %d\n", fan_reg[i], status);
                 return data;
             }
@@ -402,6 +408,7 @@ static ssize_t show_version(struct device *dev, struct device_attribute *attr, c
 
     if (val < 0) {
         dev_dbg(&client->dev, "cpld(0x%x) reg(0x1) err %d\n", client->addr, val);
+        return val;
     }
 	
     return sprintf(buf, "%d\n", val);

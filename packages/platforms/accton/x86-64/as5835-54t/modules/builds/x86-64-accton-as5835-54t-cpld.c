@@ -403,6 +403,7 @@ static ssize_t show_version(struct device *dev, struct device_attribute *attr, c
 
     if (val < 0) {
         dev_dbg(&client->dev, "cpld(0x%x) reg(0x1) err %d\n", client->addr, val);
+        return val;
     }
 	
     return sprintf(buf, "%d\n", val);

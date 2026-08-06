@@ -98,7 +98,7 @@ static onlp_led_info_t linfo[] =
     {
         { ONLP_LED_ID_CREATE(LED_LOC), "Chassis LED 1 (LOC LED)", 0 },
         ONLP_LED_STATUS_PRESENT,
-        ONLP_LED_CAPS_ON_OFF | ONLP_LED_CAPS_ORANGE_BLINKING,
+        ONLP_LED_CAPS_ON_OFF | ONLP_LED_CAPS_ORANGE | ONLP_LED_CAPS_ORANGE_BLINKING,
     },
     {
         { ONLP_LED_ID_CREATE(LED_DIAG), "Chassis LED 2 (DIAG LED)", 0 },
@@ -134,13 +134,13 @@ static int driver_to_onlp_led_mode(enum onlp_led_id id, enum led_light_mode driv
         }
     }
     
-    return 0;
+    return -1;
 }
 
 static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led_mode)
 {
     int i, nsize = sizeof(led_map)/sizeof(led_map[0]);
-    
+
     for(i = 0; i < nsize; i++)
     {
         if (id == led_map[i].id && onlp_led_mode == led_map[i].onlp_led_mode)
@@ -148,8 +148,8 @@ static int onlp_to_driver_led_mode(enum onlp_led_id id, onlp_led_mode_t onlp_led
             return led_map[i].driver_led_mode;
         }
     }
-    
-    return 0;
+
+    return -1;
 }
 
 /*
@@ -168,16 +168,23 @@ onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
     VALIDATE(id);
 	
     lid = ONLP_OID_ID_GET(id);
+    if (lid <= 0 || lid >= (int)AIM_ARRAYSIZE(leds) || leds[lid] == NULL) {
+        return ONLP_STATUS_E_INVALID;
+    }
 
 	/* Set the onlp_oid_hdr_t and capabilities */
-    *info = linfo[ONLP_OID_ID_GET(id)];
+    *info = linfo[lid];
 
     /* Get LED mode */
     if (onlp_file_read_int(&value, LED_FORMAT, leds[lid]) < 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
 
-    info->mode = driver_to_onlp_led_mode(lid, value);
+    int mode = driver_to_onlp_led_mode(lid, value);
+    if (mode < 0) {
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+    info->mode = mode;
 
     /* Set the on/off status */
     if (info->mode != ONLP_LED_MODE_OFF) {
@@ -218,14 +225,26 @@ int
 onlp_ledi_mode_set(onlp_oid_t id, onlp_led_mode_t mode)
 {
     int  lid;
-    char path[64] = {0};		
+    int  driver_mode;
+    char path[64] = {0};
 
     VALIDATE(id);
-	
+
     lid = ONLP_OID_ID_GET(id);
+    if (lid <= 0 || lid >= (int)AIM_ARRAYSIZE(leds) || leds[lid] == NULL) {
+        return ONLP_STATUS_E_INVALID;
+    }
+
+    driver_mode = onlp_to_driver_led_mode(lid, mode);
+    if (driver_mode < 0) {
+        /* No led_map[] entry for this (led, mode) pair. Reject explicitly
+         * rather than writing 0 (LED_MODE_OFF) and misleading the caller. */
+        return ONLP_STATUS_E_UNSUPPORTED;
+    }
+
     sprintf(path, LED_FORMAT, leds[lid]);
 
-    if (onlp_file_write_int(onlp_to_driver_led_mode(lid , mode), path) != 0) {
+    if (onlp_file_write_int(driver_mode, path) != 0) {
         return ONLP_STATUS_E_INTERNAL;
     }
 

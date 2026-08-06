@@ -105,7 +105,7 @@ static ssize_t show_status(struct device *dev, struct device_attribute *da,
     data = as5835_54t_psu_update_device(dev);
 	if (!data->valid) {
         mutex_unlock(&data->update_lock);
-		return sprintf(buf, "0\n");
+		return -EIO;
 	}
 
 	if (attr->index == PSU_PRESENT) {
@@ -132,7 +132,7 @@ static ssize_t show_string(struct device *dev, struct device_attribute *da,
     data = as5835_54t_psu_update_device(dev);
 	if (!data->valid) {
         mutex_unlock(&data->update_lock);
-		return 0;
+		return -EIO;
 	}
 
 	if (attr->index == PSU_MODEL_NAME) {
@@ -272,7 +272,7 @@ static int as5835_54t_psu_read_bytes(struct i2c_client *client, u8 command, u8 *
 		ssize_t status;
 
 		status = as5835_54t_psu_read_byte(client, command, data);
-		if (status <= 0) {
+		if (status < 0) {
             ret = status;
 			break;
 		}

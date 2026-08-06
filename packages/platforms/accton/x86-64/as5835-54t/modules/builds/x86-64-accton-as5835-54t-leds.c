@@ -144,6 +144,7 @@ static u8 led_light_mode_to_reg_val(enum led_type type,
 		type_mask  = led_type_mode_data[i].type_mask;
 		mode_value = led_type_mode_data[i].mode_value;
 		reg_val = (reg_val & ~type_mask) | mode_value;
+		break;
 	}
 
 	return reg_val;
@@ -196,6 +197,7 @@ static void accton_as5835_54t_led_set(struct led_classdev *led_cdev,
 									  u8 reg, enum led_type type)
 {
 	int reg_val;
+	int status;
 	
 	mutex_lock(&ledctl->update_lock);
 	reg_val = accton_as5835_54t_led_read_value(reg);
@@ -206,7 +208,11 @@ static void accton_as5835_54t_led_set(struct led_classdev *led_cdev,
 	}
 
 	reg_val = led_light_mode_to_reg_val(type, led_light_mode, reg_val);
-	accton_as5835_54t_led_write_value(reg, reg_val);
+	status = accton_as5835_54t_led_write_value(reg, reg_val);
+	if (status < 0) {
+		dev_err(&ledctl->pdev->dev, "write reg 0x%x err %d\n", reg, status);
+		goto exit;
+	}
 	ledctl->valid = 0;
 	
 exit:
@@ -303,7 +309,7 @@ static int accton_as5835_54t_led_probe(struct platform_device *pdev)
 		
 		/* only unregister the LEDs that were successfully registered */
 		for (j = 0; j < i; j++) {
-			led_classdev_unregister(&accton_as5835_54t_leds[i]);
+			led_classdev_unregister(&accton_as5835_54t_leds[j]);
 		}
 	}
 
