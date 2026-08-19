@@ -23,3 +23,6 @@ RELEASE/
 # temporary files
 *~
 .#*
+
+reviews/
+test/
