@@ -207,7 +207,7 @@ int
 onlp_ledi_info_get(onlp_oid_t id, onlp_led_info_t* info)
 {
     int  local_id;
-	char data[2] = {0};
+	char data[8] = {0};
     char fullpath[PATH_MAX] = {0};
 
     VALIDATE(id);

@@ -7,8 +7,11 @@
 
 int onlp_file_write_integer(char *filename, int value)
 {
-    char buf[8] = {0};
-    sprintf(buf, "%d", value);
+    char buf[12] = {0};
+    int n = snprintf(buf, sizeof(buf), "%d", value);
+
+    if (n < 0 || n >= (int)sizeof(buf))
+        return -1;
 
     return onlp_file_write((uint8_t*)buf, strlen(buf), filename);
 }
@@ -283,20 +286,35 @@ int onlp_data_path_reset(uint8_t unit_id, uint8_t reset_dev)
 
 enum onlp_fan_dir onlp_get_fan_dir(void)
 {
-	int value = FAN_DIR_F2B;
-	int i = 0;
+	int value = FAN_DIR_F2B, present = 0;
+	int i = 0, found = 0;
 	char  path[64] = {0};
 	enum onlp_fan_dir dir = FAN_DIR_F2B;
 
 	for(i = 0; i < CHASSIS_FAN_COUNT; i++) {
-		sprintf(path, "%s""fan%d_direction", FAN_BOARD_PATH, i+1);
+		snprintf(path, sizeof(path), "%sfan%d_present", FAN_BOARD_PATH, i+1);
+		if (onlp_file_read_int(&present, path) < 0 || present != 1)
+			continue;
+
+		snprintf(path, sizeof(path), "%sfan%d_direction", FAN_BOARD_PATH, i+1);
 		if (onlp_file_read_int(&value, path) < 0)
 			continue;
 
 		if (value == FAN_DIR_F2B || value == FAN_DIR_B2F) {
 			dir = value;
+			found = 1;
 			break;
 		}
+	}
+
+	static int warned_no_dir = 0;
+	if (!found) {
+		if (!warned_no_dir) {
+			AIM_LOG_ERROR("onlp_get_fan_dir: no present fan reported a valid direction, default F2B");
+			warned_no_dir = 1;
+		}
+	} else {
+		warned_no_dir = 0;
 	}
 
 	return dir;

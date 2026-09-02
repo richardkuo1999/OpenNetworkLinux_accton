@@ -296,6 +296,11 @@ onlp_thermali_info_get(onlp_oid_t id, onlp_thermal_info_t* info)
     info->thresholds.shutdown = threshold[dir][tid].shutdown;
 
     if(tid == THERMAL_CPU_CORE) {
+        if (sysfs_count == 0) {
+            AIM_LOG_ERROR("No CPU coretemp hwmon entries found (scan failed); cannot report CPU Core temperature\r\n");
+            return ONLP_STATUS_E_INTERNAL;
+        }
+
         for (size_t i = 0; i < sysfs_count; i++) {
             if (onlp_file_read_int(&coretemp_temp, temp_entries[i].name) < 0) {
                 AIM_LOG_ERROR("Unable to read status from file (%s)\r\n", temp_entries[i].name);

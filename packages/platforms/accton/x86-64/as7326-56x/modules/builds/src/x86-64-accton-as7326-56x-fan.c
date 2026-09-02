@@ -286,7 +286,49 @@ static u32 reg_val_to_duty_cycle(u8 reg_val)
 
 static u8 duty_cycle_to_reg_val(u8 duty_cycle)
 {
-    return ((u32)duty_cycle * 100 / 625) - 1;
+    u32 reg_val = (u32)duty_cycle * 100 / 625;
+
+    /* The register holds (step - 1), where one step is 6.25%. A duty cycle
+     * below 7% truncates to step 0, so decrementing without a floor would
+     * underflow to 0xFF and write undefined bits above FAN_DUTY_CYCLE_REG_MASK.
+     */
+    if (reg_val < 1)
+        reg_val = 1;
+    else if (reg_val > FAN_DUTY_CYCLE_REG_MASK + 1)
+        reg_val = FAN_DUTY_CYCLE_REG_MASK + 1;
+
+    return (u8)(reg_val - 1);
+}
+
+static int fan_write_duty_cycle(struct i2c_client *client, int duty_cycle)
+{
+    struct as7326_56x_fan_data *data = i2c_get_clientdata(client);
+    int status;
+
+    if (duty_cycle < 0)
+        return -EINVAL;
+
+    if (duty_cycle > FAN_MAX_DUTY_CYCLE)
+        duty_cycle = FAN_MAX_DUTY_CYCLE;
+
+    mutex_lock(&data->update_lock);
+
+    status = as7326_56x_fan_write_value(client, 0x33, 0); /* Disable fan speed watch dog */
+    if (status < 0)
+        goto out;
+
+    status = as7326_56x_fan_write_value(client, fan_reg[FAN_DUTY_CYCLE_PERCENTAGE],
+                                        duty_cycle_to_reg_val(duty_cycle));
+
+out:
+    mutex_unlock(&data->update_lock);
+
+    if (status < 0)
+        dev_err(&client->dev,
+                "Unable to set fan duty cycle to %d%%, err %d\n",
+                duty_cycle, status);
+
+    return status < 0 ? status : 0;
 }
 
 static u32 reg_val_to_speed_rpm(u8 reg_val)
@@ -348,7 +390,15 @@ static ssize_t set_enable(struct device *dev, struct device_attribute *da,
     if (value == 0)
     {
         mutex_unlock(&data->update_lock);
-        return set_duty_cycle(dev, da, buf, FAN_MAX_DUTY_CYCLE);
+
+        /* pwm1_enable=0 leaves automatic control, so drive the fans at full
+         * speed.
+         */
+        error = fan_write_duty_cycle(client, FAN_MAX_DUTY_CYCLE);
+        if (error)
+            return error;
+
+        return count;
     }
 
     mutex_unlock(&data->update_lock);
@@ -382,13 +432,10 @@ static ssize_t set_duty_cycle(struct device *dev, struct device_attribute *da,
     if (error)
         return error;
 
-    if (value < 0)
-        return -EINVAL;
+    error = fan_write_duty_cycle(client, value);
+    if (error)
+        return error;
 
-    value = (value > FAN_MAX_DUTY_CYCLE)? FAN_MAX_DUTY_CYCLE : value;
-
-    as7326_56x_fan_write_value(client, 0x33, 0); /* Disable fan speed watch dog */
-    as7326_56x_fan_write_value(client, fan_reg[FAN_DUTY_CYCLE_PERCENTAGE], duty_cycle_to_reg_val(value));
     return count;
 }
 

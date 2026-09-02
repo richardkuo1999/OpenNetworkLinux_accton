@@ -92,6 +92,14 @@ onlp_sysi_onie_data_get(uint8_t** data, int* size)
     return ONLP_STATUS_E_INTERNAL;
 }
 
+void
+onlp_sysi_onie_data_free(uint8_t* data)
+{
+    if (data != NULL) {
+        aim_free(data);
+    }
+}
+
 int
 onlp_sysi_oids_get(onlp_oid_t* table, int max)
 {
@@ -128,16 +136,21 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
     int   i, v[NUM_OF_CPLD] = {0};
     int   rv;
     onlp_onie_info_t onie;
+    int   onie_valid = 0;
     char *bios_ver = NULL;
     char *paths[] = {IDPROM_PATH_2, IDPROM_PATH_1};
+
+    memset(&onie, 0, sizeof(onie));
+    list_init(&onie.vx_list);
 
     onlp_file_read_str(&bios_ver, BIOS_VER_PATH);
 
     for (i = 0 ; i < AIM_ARRAYSIZE(paths); i++ ){
         rv = onlp_onie_decode_file(&onie, paths[i]);
-        /* Decode succeeded if rv >= 0 */
-        if(rv >= 0)
+        if(rv == 0) {
+            onie_valid = 1;
             break;
+        }
     }
 
     for (i = 0; i < NUM_OF_CPLD; i++) {
@@ -153,7 +166,9 @@ onlp_sysi_platform_info_get(onlp_platform_info_t* pi)
                                     v[0], v[1], v[2], v[3], v[4]);
 
     pi->other_versions = aim_fstrdup("\r\n\t   BIOS: %s\r\n\t   ONIE: %s",
-                                    bios_ver, onie.onie_version);
+                                    bios_ver ? bios_ver : "N/A",
+                                    (onie_valid && onie.onie_version) ?
+                                        onie.onie_version : "N/A");
 
     onlp_onie_info_free(&onie);
     AIM_FREE_IF_PTR(bios_ver);
@@ -208,6 +223,28 @@ fan_ctrl_policy_t  fan_thermal_policy[] = {
 
 static int fan_state=LEVEL_FAN_DEF;
 static int alarm_state = 0; /* 0->default or clear, 1-->alarm detect */
+
+// Emergency action when the board reaches the critical temperature level.
+static void
+thermal_critical_reboot(void)
+{
+    int rv;
+
+    AIM_SYSLOG_CRIT("Temperature critical", "Temperature critical",
+                    "Alarm for temperature critical is detected, reboot DUT");
+
+    rv = system("sync;sync;sync");
+    if (rv != 0) {
+        AIM_LOG_ERROR("sync before emergency reboot failed (rv=%d), rebooting anyway", rv);
+    }
+
+    rv = system("reboot");
+    if (rv != 0) {
+        AIM_LOG_ERROR("Emergency reboot request failed (rv=%d), will retry on the next poll", rv);
+        fan_state = LEVEL_FAN_MAX;
+    }
+}
+
 int
 onlp_sysi_platform_manage_fans(void)
 {
@@ -309,10 +346,7 @@ onlp_sysi_platform_manage_fans(void)
     {
         if (temp > fan_thermal_policy[i].temp_down)
         {
-            if (temp <= fan_thermal_policy[i].temp_up)
-            {
-                current_state =i;
-            }
+            current_state = i;
         }
     }
 
@@ -333,11 +367,6 @@ onlp_sysi_platform_manage_fans(void)
         if (onlp_fani_info_get(ONLP_FAN_ID_CREATE(i), &fan_info) != ONLP_STATUS_OK) {
             AIM_LOG_ERROR("Unable to get fan(%d) status, try to set the other fans as full speed\r\n", i);
             onlp_fani_percentage_set(ONLP_FAN_ID_CREATE(1), FAN_DUTY_CYCLE_MAX);
-            if (fan_state < LEVEL_FAN_MAX)
-            {
-                fan_state=LEVEL_FAN_MAX;
-                current_state=fan_state;
-            }
             if(current_state <LEVEL_FAN_MAX )
                 current_state=LEVEL_FAN_MAX;
             break;
@@ -347,11 +376,6 @@ onlp_sysi_platform_manage_fans(void)
         if (fan_info.status & ONLP_FAN_STATUS_FAILED || !(fan_info.status & ONLP_FAN_STATUS_PRESENT)) {
             AIM_LOG_ERROR("Fan(%d) is not working, set the other fans as full speed\r\n", i);
             onlp_fani_percentage_set(ONLP_FAN_ID_CREATE(1), FAN_DUTY_CYCLE_MAX);
-            if (fan_state < LEVEL_FAN_MAX)
-            {
-                fan_state=LEVEL_FAN_MAX;
-                current_state=fan_state;
-            }
             if(current_state <LEVEL_FAN_MAX )
                 current_state=LEVEL_FAN_MAX;
             break;
@@ -375,9 +399,7 @@ onlp_sysi_platform_manage_fans(void)
                  }
                  if(current_state==LEVEL_TEMP_CRITICAL)
                  {
-                     AIM_SYSLOG_CRIT("Temperature critical", "Temperature critical", "Alarm for temperature critical is detected, reboot DUT");
-                     system("sync;sync;sync");
-                     system("reboot");
+                     thermal_critical_reboot();
                  }
                  break;
              case LEVEL_FAN_MID:
@@ -391,9 +413,7 @@ onlp_sysi_platform_manage_fans(void)
                  }
                  if(current_state==LEVEL_TEMP_CRITICAL)
                  {
-                     AIM_SYSLOG_CRIT("Temperature critical", "Temperature critical", "Alarm for temperature critical is detected, reboot DUT");
-                     system("sync;sync;sync");
-                     system("reboot");
+                     thermal_critical_reboot();
                  }
                  break;
              case LEVEL_FAN_MAX:
@@ -407,17 +427,13 @@ onlp_sysi_platform_manage_fans(void)
                  }
                  if(current_state==LEVEL_TEMP_CRITICAL)
                  {
-                     AIM_SYSLOG_CRIT("Temperature critical", "Temperature critical ", "Alarm for temperature critical is detected, reboot DUT");
-                     system("sync;sync;sync");
-                     system("reboot");
+                     thermal_critical_reboot();
                  }
                  break;
              case LEVEL_TEMP_HIGH:
                  if(current_state==LEVEL_TEMP_CRITICAL)
                  {
-                     AIM_SYSLOG_CRIT("Temperature critical", "Temperature critical ", "Alarm for temperature critical is detected, reboot DUT");
-                     system("sync;sync;sync");
-                     system("reboot");
+                     thermal_critical_reboot();
                  }
                  break;
              case LEVEL_TEMP_CRITICAL:

@@ -58,9 +58,9 @@ def _8v89307_init():
         process = subprocess.Popen(script, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, stderr = process.communicate()
         status = process.returncode
-        print(stdout)
+        print(stdout.decode())
         if status != 0:
-            print("Error in 8v89307_init: " + stderr)
+            print("Error in 8v89307_init: " + stderr.decode())
             return False
     return True
 

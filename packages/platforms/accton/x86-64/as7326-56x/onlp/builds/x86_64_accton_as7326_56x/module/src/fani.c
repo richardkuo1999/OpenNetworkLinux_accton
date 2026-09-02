@@ -335,8 +335,8 @@ onlp_fani_percentage_set(onlp_oid_t id, int p)
 
     fid = ONLP_OID_ID_GET(id);
 
-    /* reject p=0 (p=0, stop fan) */
-    if (p == 0){
+    /* reject out-of-range duty: valid percentage is 1..100 */
+    if (p <= 0 || p > 100){
         return ONLP_STATUS_E_INVALID;
     }
 

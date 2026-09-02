@@ -179,6 +179,7 @@ onlp_sfpi_presence_bitmap_get(onlp_sfp_bitmap_t* dst)
     presence_all |= per_cpld;
 
     /* Populate bitmap */
+    AIM_BITMAP_CLR_ALL(dst);
     for(i = 0; presence_all; i++) {
         AIM_BITMAP_MOD(dst, i, (presence_all & 1));
         presence_all >>= 1;
@@ -196,7 +197,7 @@ onlp_sfpi_rx_los_bitmap_get(onlp_sfp_bitmap_t* dst)
     FILE* fp;
     unsigned long long all = 0, per_cpld;
 
-    /* Read present status of port 0~23 */
+    /* Read RX_LOS status of all ports (0~57) from both CPLDs */
     int addr, i = 0;
 
     for (addr = 62; addr >= 60; addr-=2) {
@@ -232,6 +233,7 @@ onlp_sfpi_rx_los_bitmap_get(onlp_sfp_bitmap_t* dst)
     all |= per_cpld;
 
     /* Populate bitmap */
+    AIM_BITMAP_CLR_ALL(dst);
     for(i = 0; all; i++) {
         AIM_BITMAP_MOD(dst, i, (all & 1));
         all >>= 1;
