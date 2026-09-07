@@ -50,10 +50,16 @@
 #define TLV_INFO_MAX_LEN        2048
 #define TLV_TOTAL_LEN_MAX       (TLV_INFO_MAX_LEN - sizeof(tlvinfo_header_t))
 
+/* A CRC-32 TLV is the minimum any valid TlvInfo body must contain. */
+#define TLV_CRC_TLV_LEN         (sizeof(tlvinfo_tlv_t) + 4)
+#define TLV_TOTAL_LEN_MIN       TLV_CRC_TLV_LEN
+
 /**
  * Validate checksum
+ *
+ * avail is the number of bytes that are safe to read from data.
  */
-static int checksum_validate__(const uint8_t *data);
+static int checksum_validate__(const uint8_t *data, int avail);
 
 
 /**
@@ -165,86 +171,185 @@ decode_tlv__(onlp_onie_info_t* info, tlvinfo_tlv_t * tlv)
 /**
  *  is_valid_tlvinfo_header
  *
- *  Perform sanity checks on the first 11 bytes of the TlvInfo EEPROM
- *  data pointed to by the parameter:
- *      1. First 8 bytes contain null-terminated ASCII string "TlvInfo"
- *      2. Version byte is 1
- *      3. Total length bytes contain value which is less than or equal
- *         to the allowed maximum (2048-11)
+ *  Perform sanity checks on the TlvInfo EEPROM header pointed to by hdr,
+ *  bounded by avail (the number of bytes safe to read from hdr):
+ *      1. avail is large enough to hold the header.
+ *      2. First 8 bytes contain null-terminated ASCII string "TlvInfo".
+ *      3. Version byte is 1.
+ *      4. Total length is within the spec maximum (2048-11), holds at least
+ *         a CRC-32 TLV, and does not run past the readable buffer.
  *
  */
-static inline int is_valid_tlvinfo_header__(tlvinfo_header_t *hdr)
+static int is_valid_tlvinfo_header__(const tlvinfo_header_t *hdr, int avail)
 {
-    return( (strcmp(hdr->signature, TLV_INFO_ID_STRING) == 0) &&
-            (hdr->version == TLV_INFO_VERSION) &&
-            (ntohs(hdr->totallen) <= TLV_TOTAL_LEN_MAX) );
+    int totallen;
+
+    if(hdr == NULL || avail < (int)sizeof(tlvinfo_header_t)) {
+        return 0;
+    }
+    /*
+     * Ensure signature is NUL-terminated within its 8-byte field before
+     * calling strcmp(), otherwise strcmp() can read past the field.
+     */
+    if(memchr(hdr->signature, 0, sizeof(hdr->signature)) == NULL) {
+        return 0;
+    }
+    if(strcmp(hdr->signature, TLV_INFO_ID_STRING) != 0) {
+        return 0;
+    }
+    if(hdr->version != TLV_INFO_VERSION) {
+        return 0;
+    }
+
+    totallen = ntohs(hdr->totallen);
+
+    if(totallen > (int)TLV_TOTAL_LEN_MAX) {
+        return 0;
+    }
+    if(totallen < (int)TLV_TOTAL_LEN_MIN) {
+        return 0;
+    }
+    /* Core bound: totallen must fit inside the readable buffer. */
+    if(totallen > avail - (int)sizeof(tlvinfo_header_t)) {
+        return 0;
+    }
+    return 1;
 }
 
 
 /**
  *  is_valid_tlv
  *
- *  Perform basic sanity checks on a TLV field. The TLV is pointed to
- *  by the parameter provided.
- *      1. The type code is not reserved (0x00 or 0xFF)
+ *  Validate the TLV that starts at 'curr_tlv' within 'data', bounded by
+ *  'tlv_end' (the end of the declared TLV region):
+ *      1. The fixed TLV header (type + length) fits before tlv_end.
+ *      2. The type code is not reserved (0x00 or 0xFF).
+ *      3. The value does not run past tlv_end.
+ *      4. Fixed-width TLVs carry exactly the length the ONIE spec mandates.
+ *  Returns 1 if the TLV is valid, 0 otherwise (logging the reason).
  */
-static inline int is_valid_tlv__(tlvinfo_tlv_t *tlv)
+static int is_valid_tlv__(const uint8_t *data, int curr_tlv, int tlv_end)
 {
-       return( (tlv->type != 0x00) &&
-               (tlv->type != 0xFF) );
+    const tlvinfo_tlv_t *tlv;
 
+    /* The fixed header (type + length) must fit before tlv_end. */
+    if(curr_tlv + (int)sizeof(tlvinfo_tlv_t) > tlv_end) {
+        AIM_LOG_ERROR("ONIE data has a truncated TLV header at offset %d.", curr_tlv);
+        return 0;
+    }
+
+    tlv = (const tlvinfo_tlv_t *) &data[curr_tlv];
+
+    if((tlv->type == 0x00) || (tlv->type == 0xFF)) {
+        AIM_LOG_ERROR("ONIE data invalid TLV field starting at offset %d", curr_tlv);
+        return 0;
+    }
+
+    /* The value must not run past the declared data length. */
+    if(curr_tlv + (int)sizeof(tlvinfo_tlv_t) + tlv->length > tlv_end) {
+        AIM_LOG_ERROR("ONIE TLV at offset %d (type 0x%.2x, length %d) overruns "
+                      "the declared data length.",
+                      curr_tlv, tlv->type, tlv->length);
+        return 0;
+    }
+
+    /* Fixed-width TLVs are decoded by reading a fixed number of value bytes */
+    switch(tlv->type) {
+    case TLV_CODE_MAC_BASE:       if(tlv->length != 6) goto bad_len; break;
+    case TLV_CODE_MAC_SIZE:       if(tlv->length != 2) goto bad_len; break;
+    case TLV_CODE_DEVICE_VERSION: if(tlv->length != 1) goto bad_len; break;
+    case TLV_CODE_CRC_32:         if(tlv->length != 4) goto bad_len; break;
+    default: break;
+    }
+
+    return 1;
+
+ bad_len:
+    AIM_LOG_ERROR("ONIE TLV at offset %d (type 0x%.2x) has bad length %d.",
+                  curr_tlv, tlv->type, tlv->length);
+    return 0;
 }
 
+
+/*
+ * Resolve how many bytes may be read from the ONIE buffer, bounding an
+ * out-of-range 'totallen' from walking past it:
+ *   size > 0 : clamp to the caller-supplied size (preferred).
+ *   size == 0: empty buffer, nothing to read.
+ *   size < 0 : size unknown (legacy callers); fall back to the ONIE spec max.
+ *              Residual risk: a real buffer < 2048 bytes can still be over-read
+ *              up to 2048 -- callers should pass the real size.
+ * Returns the readable byte count, or -1 if the buffer is unusable.
+ */
+static int
+readable_avail__(int size)
+{
+    if(size == 0) {
+        return -1;
+    }
+    if(size > 0) {
+        return (size > TLV_INFO_MAX_LEN) ? TLV_INFO_MAX_LEN : size;
+    }
+    return TLV_INFO_MAX_LEN;
+}
 
 int
 onlp_onie_decode(onlp_onie_info_t* rv, const uint8_t* data, int size)
 {
     int tlv_end;
     int curr_tlv;
+    int totallen;
+    int avail;
     tlvinfo_header_t* data_hdr = (tlvinfo_header_t *) data;
     tlvinfo_tlv_t* data_tlv;
 
-    if(rv == NULL || data == NULL || (size && size < sizeof(*data_hdr))) {
+    if(rv == NULL || data == NULL) {
         return -1;
     }
 
     memset(rv, 0, sizeof(*rv));
     list_init(&rv->vx_list);
 
-    if ( !is_valid_tlvinfo_header__(data_hdr) ) {
+    avail = readable_avail__(size);
+    if(avail < 0) {
+        AIM_LOG_ERROR("ONIE data buffer is empty or has an invalid size.");
+        return -1;
+    }
+
+    if ( !is_valid_tlvinfo_header__(data_hdr, avail) ) {
         AIM_LOG_ERROR("ONIE data is not in TlvInfo format.");
+        return -1;
+    }
+
+    totallen = ntohs(data_hdr->totallen);
+
+    /* Validate CRC checksum before attempting to parse */
+    if(checksum_validate__(data, avail) != 0) {
+        /* Error already logged */
         return -1;
     }
 
     rv->_hdr_id_string = aim_strdup(data_hdr->signature);
     rv->_hdr_version = data_hdr->version;
-    rv->_hdr_length = ntohs(data_hdr->totallen);
-
-    /* We only parse TLV Header Version 1 */
-    if(rv->_hdr_version != 1) {
-        AIM_LOG_ERROR("ONIE data header version %d id string %s is not supported.", rv->_hdr_version, rv->_hdr_id_string);
-        return -1;
-    }
-
-    /* Validate CRC checksum before attempting to parse */
-    if(checksum_validate__(data) != 0) {
-        /* Error already logged */
-        return -1;
-    }
-
+    rv->_hdr_length = totallen;
 
     curr_tlv = sizeof(tlvinfo_header_t);
-    tlv_end  = sizeof(tlvinfo_header_t) + ntohs(data_hdr->totallen);
+    tlv_end  = sizeof(tlvinfo_header_t) + totallen;
     while (curr_tlv < tlv_end) {
-        data_tlv = (tlvinfo_tlv_t *) &data[curr_tlv];
-        if (!is_valid_tlv__(data_tlv)) {
-            AIM_LOG_ERROR("ONIE data invalid TLV field starting at offset %d\n", curr_tlv);
+        if (!is_valid_tlv__(data, curr_tlv, tlv_end)) {
+            /* Error already logged */
+            onlp_onie_info_free(rv);
+            memset(rv, 0, sizeof(*rv));
+            list_init(&rv->vx_list);
             return -1;
         }
+        data_tlv = (tlvinfo_tlv_t *) &data[curr_tlv];
         decode_tlv__(rv, data_tlv);
         curr_tlv += sizeof(tlvinfo_tlv_t) + data_tlv->length;
     }
 
+    /* Mark the CRC valid only after a clean walk, never on a bounds failure. */
+    rv->_hdr_valid_crc = 1;
     return 0;
 }
 
@@ -252,24 +357,52 @@ int
 onlp_onie_decode_file(onlp_onie_info_t* onie, const char* file)
 {
     char* data;
-    FILE* fp  = fopen(file, "rb");
-    int rv = -1;
+    long  fsize;
+    int   size;
+    size_t nread;
+    FILE* fp;
+    int rv;
 
-    if(fp) {
-        fseek(fp, 0L, SEEK_END);
-        int size = ftell(fp);
-        rewind(fp);
-        data = aim_malloc(size);
-
-        rv = fread(data, 1, size, fp);
-        fclose(fp);
-
-        if(rv == size) {
-            rv = onlp_onie_decode(onie, (uint8_t*)data, size);
-        }
-
-        aim_free(data);
+    if(onie == NULL || file == NULL) {
+        return -1;
     }
+
+    /* Initialise so a caller testing 'rv >= 0' never sees garbage on error. */
+    memset(onie, 0, sizeof(*onie));
+    list_init(&onie->vx_list);
+
+    if((fp = fopen(file, "rb")) == NULL) {
+        return -1;
+    }
+
+    if(fseek(fp, 0L, SEEK_END) != 0 || (fsize = ftell(fp)) < 0) {
+        fclose(fp);
+        return -1;
+    }
+    if(fsize < (long)sizeof(tlvinfo_header_t)) {
+        AIM_LOG_ERROR("ONIE data file '%s' is too small (%ld bytes).", file, fsize);
+        fclose(fp);
+        return -1;
+    }
+
+    /* Never read (or allocate) more than the ONIE spec maximum. */
+    size = (fsize > TLV_INFO_MAX_LEN) ? TLV_INFO_MAX_LEN : (int)fsize;
+    rewind(fp);
+
+    data  = aim_zmalloc(size);
+    nread = fread(data, 1, size, fp);
+    fclose(fp);
+
+    if(nread != (size_t)size) {
+        AIM_LOG_ERROR("ONIE data file '%s' short read (%zu of %d bytes).",
+                      file, nread, size);
+        aim_free(data);
+        return -1;
+    }
+
+    /* Pass the real, bounded size so the strict (size > 0) path is used. */
+    rv = onlp_onie_decode(onie, (uint8_t*)data, size);
+    aim_free(data);
     return rv;
 }
 
@@ -280,30 +413,42 @@ onlp_onie_decode_file(onlp_onie_info_t* onie, const char* file)
  *  and compare it to the value stored in the EEPROM CRC-32 TLV.
  */
 static int
-checksum_validate__(const uint8_t *data)
+checksum_validate__(const uint8_t *data, int avail)
 {
-    tlvinfo_header_t* data_hdr = (tlvinfo_header_t *) data;
-    tlvinfo_tlv_t* data_crc;
+    const tlvinfo_header_t* data_hdr = (const tlvinfo_header_t *) data;
+    const tlvinfo_tlv_t* data_crc;
     unsigned int calc_crc;
     unsigned int stored_crc;
+    int totallen;
+    int crc_offset;
 
-    // Is the eeprom header valid?
-    if (!is_valid_tlvinfo_header__(data_hdr)) {
-        return 0;
+    /* Is the eeprom header valid? */
+    if (!is_valid_tlvinfo_header__(data_hdr, avail)) {
+        AIM_LOG_ERROR("ONIE header is invalid; refusing to validate the CRC.");
+        return -1;
     }
 
-    // Is the last TLV a CRC?
-    data_crc = (tlvinfo_tlv_t *) &data[sizeof(tlvinfo_header_t) +
-                                       ntohs(data_hdr->totallen) - (sizeof(tlvinfo_tlv_t) + 4)];
+    totallen   = ntohs(data_hdr->totallen);
+    crc_offset = (int)sizeof(tlvinfo_header_t) + totallen - (int)TLV_CRC_TLV_LEN;
 
+    /* The CRC TLV must sit within the readable buffer. */
+    if(crc_offset < (int)sizeof(tlvinfo_header_t) ||
+       crc_offset + (int)TLV_CRC_TLV_LEN > avail) {
+        AIM_LOG_ERROR("ONIE CRC TLV offset %d is out of range (%d bytes available).",
+                      crc_offset, avail);
+        return -1;
+    }
+
+    /* Is the last TLV a CRC? */
+    data_crc = (const tlvinfo_tlv_t *) &data[crc_offset];
     if ((data_crc->type != TLV_CODE_CRC_32) || (data_crc->length != 4)) {
         AIM_LOG_ERROR("ONIE CRC TLV is invalid.");
-        return 0;
+        return -1;
     }
 
-    // Calculate the checksum
+    /* Calculate the checksum */
     calc_crc = onlp_crc32(0, (void *)data,
-                          sizeof(tlvinfo_header_t) + ntohs(data_hdr->totallen) - 4);
+                          (int)sizeof(tlvinfo_header_t) + totallen - 4);
     stored_crc = (data_crc->value[0] << 24) |
         (data_crc->value[1] << 16) |
         (data_crc->value[2] <<  8) |
