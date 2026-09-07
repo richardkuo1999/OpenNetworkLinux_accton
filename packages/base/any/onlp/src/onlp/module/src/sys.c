@@ -101,22 +101,24 @@ onlp_sys_init_locked__(void)
 ONLP_LOCKED_API0(onlp_sys_init);
 
 static uint8_t*
-onie_data_get__(int* free)
+onie_data_get__(int* free, int* size)
 {
     void* pa;
     uint8_t* ma = NULL;
-    int size;
+    int sz = -1;
     if(onlp_sysi_onie_data_phys_addr_get(&pa) == 0) {
-        ma = onlp_mmap((off_t)pa, 64*1024, "onie_data_get__");
+        sz = 64*1024;
+        ma = onlp_mmap((off_t)pa, sz, "onie_data_get__");
         *free = 0;
     }
-    else if(onlp_sysi_onie_data_get(&ma, &size) == 0) {
+    else if(onlp_sysi_onie_data_get(&ma, &sz) == 0) {
         *free = 1;
     }
     else {
         ma = NULL;
         *free = 0;
     }
+    *size = (ma != NULL) ? sz : 0;
     return ma;
 }
 
@@ -133,10 +135,15 @@ onlp_sys_info_get_locked__(onlp_sys_info_t* rv)
      * Get the system ONIE information.
      */
     int free;
-    uint8_t* onie_data = onie_data_get__(&free);
+    int onie_size = 0;
+    uint8_t* onie_data = onie_data_get__(&free, &onie_size);
 
     if(onie_data) {
-        onlp_onie_decode(&rv->onie_info, onie_data, -1);
+        if(onlp_onie_decode(&rv->onie_info, onie_data, onie_size) != 0) {
+            onlp_onie_info_free(&rv->onie_info);
+            memset(&rv->onie_info, 0, sizeof(rv->onie_info));
+            list_init(&rv->onie_info.vx_list);
+        }
         if(free) {
             onlp_sysi_onie_data_free(onie_data);
         }
